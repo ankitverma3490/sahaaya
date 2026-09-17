@@ -1,0 +1,236 @@
+:root {
+    --primary-green: #D98579;
+    --secondary-green: #E8A99E;
+    --primary-orange: #FFBA6A;
+    --light-gray: #f5f5f5;
+    --text-dark: #444;
+}
+
+header {
+    background-color: #FFFF;
+}
+
+/* Top Bar */
+.top-bar {
+    background-color: var(--primary-green);
+    font-size: 0.85rem;
+    color: white;
+    padding: 10px !important;
+}
+
+.top-bar i {
+    color: #ffb752;
+}
+
+.logo-home {
+    color: var(--secondary-green);
+}
+
+.logo-box {
+    color: var(--primary-green);
+}
+
+.logo i {
+    color: var(--secondary-green);
+    font-size: 1.75rem;
+}
+
+/* Search Box */
+.search-box input {
+    border-right: none;
+    border-color: #ccc;
+    border-radius: 4px 0 0 4px;
+    box-shadow: none !important;
+}
+
+.search-box input:focus {
+    border-color: var(--primary-orange);
+}
+
+.search-btn {
+    background-color: var(--primary-orange);
+    color: white;
+    border-radius: 0 5px 5px 0;
+    width: 50px;
+}
+
+.search-btn:hover {
+    background-color: var(--primary-orange);
+    color: black;
+}
+
+.btn-outline-location {
+    border: 1px solid var(--primary-orange);
+    color: var(--primary-orange);
+    font-size: 0.85rem;
+    border-radius: 5px;
+    padding: 12px;
+}
+
+.btn-outline-location:hover {
+    border: 1px solid var(--primary-orange);
+    color: var(--primary-orange);
+}
+
+/* Wallet + Icons */
+.wallet-box {
+
+    font-size: 0.85rem;
+    /* padding: 4px 8px; */
+    color: var(--text-dark);
+}
+
+.wallettext {
+    /* line-height: 110%; */
+    font-family: General Sans;
+    font-weight: 400;
+    font-style: Regular;
+    font-size: 14px;
+    leading-trim: NONE;
+    line-height: 100%;
+    letter-spacing: 0%;
+    color: #061116 !important;
+}
+
+.wlaletimg {
+    width: 33.3px !important;
+
+}
+
+.icon-circle {
+    width: 45px;
+    height: 45px;
+    border-radius: 23%;
+
+    border: 2px solid var(--light-gray);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: var(--text-dark);
+}
+
+.main-header {
+    border-bottom: 1px solid #ddd;
+}
+
+/* Navbar */
+.custom-navbar {
+    border-top: 1px solid #ddd;
+}
+
+.nav-link {
+    color: var(--text-dark);
+    font-weight: 500;
+    padding: 1rem 1rem;
+    text-transform: uppercase;
+    font-size: 14px;
+    transition: all 0.3s;
+    letter-spacing: 2%;
+}
+
+.navbar-nav .nav-item {
+    margin: 0 20px;
+}
+
+.nav-link-active {
+    color: var(--primary-orange) !important;
+    /* border-bottom: 2px solid var(--primary-orange); */
+}
+
+.nav-link:hover {
+    color: var(--primary-orange);
+}
+
+
+/* Mobile */
+@media (max-width: 768px) {
+
+    .deskopheader {
+        display: none !important;
+    }
+
+    /* .tabletsize {
+        display: none;
+    } */
+
+
+    .mobileheader {
+        display: block !important;
+    }
+
+    .icon-circle {
+        width: 35px;
+        height: 35px;
+        border-radius: 23%;
+
+        border: 2px solid var(--light-gray);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        color: var(--text-dark);
+    }
+
+    .tooglebtn {
+        margin-top: -5px !important;
+    }
+
+
+}
+
+.mobileheader {
+    display: none;
+}
+
+.deskopheader {
+    display: block;
+}
+
+.logomob {
+    margin-top: -20px;
+}
+
+
+
+.custom-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 65px;
+    background: #fff;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    border-top: 1px solid #e5e5e5;
+    z-index: 9999;
+}
+
+.custom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-decoration: none;
+    font-size: 12px;
+    color: #7C7C7C;
+    /* default green */
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.custom-nav-item.active {
+    color: #FFBA6A;
+    /* active orange */
+}
+
+.custom-nav-icon {
+    width: 22px;
+    height: 22px;
+    margin-bottom: 4px;
+    filter: brightness(0) saturate(100%) invert(27%) sepia(54%) saturate(361%) hue-rotate(110deg) brightness(95%) contrast(92%);
+}
+
+.custom-nav-item.active .custom-nav-icon {
+    filter: brightness(0) saturate(100%) invert(60%) sepia(91%) saturate(2400%) hue-rotate(347deg) brightness(97%) contrast(98%);
+}

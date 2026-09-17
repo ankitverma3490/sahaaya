@@ -1,0 +1,345 @@
+import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  ActivityIndicator,
+  Linking,
+  PermissionsAndroid,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import MapView, {Marker, PROVIDER_GOOGLE} from 'react-native-maps';
+import Geolocation from '@react-native-community/geolocation';
+import {Font} from '../Constants/Font';
+
+const DEFAULT_REGION = {
+  latitude: 20.5937,
+  longitude: 78.9629,
+  latitudeDelta: 18,
+  longitudeDelta: 18,
+};
+
+const buildRegion = (latitude, longitude, zoomed = true) => ({
+  latitude,
+  longitude,
+  latitudeDelta: zoomed ? 0.01 : DEFAULT_REGION.latitudeDelta,
+  longitudeDelta: zoomed ? 0.01 : DEFAULT_REGION.longitudeDelta,
+});
+
+const parseCoordinate = (value) => {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const isValidCoordinate = (latitude, longitude) =>
+  latitude !== null &&
+  longitude !== null &&
+  latitude >= -90 &&
+  latitude <= 90 &&
+  longitude >= -180 &&
+  longitude <= 180;
+
+const requestLocationPermission = async () => {
+  if (Platform.OS !== 'android') {
+    return true;
+  }
+
+  const granted = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    {
+      title: 'Location Permission Required',
+      message: 'Allow Sahayya to show your current location on the map.',
+      buttonPositive: 'Allow',
+      buttonNegative: 'Cancel',
+    },
+  );
+
+  return granted === PermissionsAndroid.RESULTS.GRANTED;
+};
+
+const LocationMap = ({
+  lat,
+  long,
+  onMarkerDragEnd,
+  height = 200,
+  autoLocate = true,
+}) => {
+  const [region, setRegion] = useState(null);
+  const [selectedCoordinate, setSelectedCoordinate] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [hasLocationPermission, setHasLocationPermission] = useState(false);
+  const [permissionMessage, setPermissionMessage] = useState('');
+  const didAutoLocateRef = useRef(false);
+  const mapRef = useRef(null);
+  const isDraggingRef = useRef(false);
+
+  useEffect(() => {
+    const latitude = parseCoordinate(lat);
+    const longitude = parseCoordinate(long);
+
+    if (isValidCoordinate(latitude, longitude)) {
+      const newRegion = buildRegion(latitude, longitude);
+      setRegion(newRegion);
+      setSelectedCoordinate({latitude, longitude});
+      if (mapRef.current && !isDraggingRef.current) {
+        setTimeout(() => {
+          mapRef.current?.animateToRegion(newRegion, 400);
+        }, 100);
+      }
+    }
+  }, [lat, long]);
+
+  const updateSelectedLocation = useCallback((latitude, longitude, animate = false) => {
+    if (!isValidCoordinate(latitude, longitude)) return;
+
+    setSelectedCoordinate({latitude, longitude});
+    
+    if (animate && mapRef.current) {
+      const nextRegion = buildRegion(latitude, longitude);
+      mapRef.current?.animateToRegion(nextRegion, 400);
+    }
+    
+    onMarkerDragEnd?.({latitude, longitude});
+  }, [onMarkerDragEnd]);
+
+  const getCurrentLocation = useCallback(async () => {
+    setPermissionMessage('');
+    setLoading(true);
+
+    let hasPermission = false;
+    try {
+      hasPermission = await requestLocationPermission();
+    } catch (permissionError) {
+      setLoading(false);
+      setRegion(prev => prev || DEFAULT_REGION);
+      setPermissionMessage(
+        'Could not request location permission. Search above or tap the map to drop the pin.',
+      );
+      return;
+    }
+
+    setHasLocationPermission(hasPermission);
+    if (!hasPermission) {
+      setLoading(false);
+      setRegion(prev => prev || DEFAULT_REGION);
+      setPermissionMessage('Location permission is off. Search above or enable location to use your current position.');
+      return;
+    }
+
+    Geolocation.getCurrentPosition(
+      position => {
+        setLoading(false);
+        const {latitude, longitude} = position.coords;
+        updateSelectedLocation(latitude, longitude, true);
+      },
+      error => {
+        setLoading(false);
+        setRegion(prev => prev || DEFAULT_REGION);
+        if (error.code === 1) {
+          setPermissionMessage('Location permission is off. Search above or enable location to use your current position.');
+        } else {
+          setPermissionMessage('Could not detect current location. You can still search above or tap the map to drop the pin.');
+        }
+      },
+      {enableHighAccuracy: false, timeout: 30000, maximumAge: 60000},
+    );
+  }, [updateSelectedLocation]);
+
+  useEffect(() => {
+    const hasInitialCoordinate = isValidCoordinate(
+      parseCoordinate(lat),
+      parseCoordinate(long),
+    );
+
+    if (autoLocate && !hasInitialCoordinate && !didAutoLocateRef.current) {
+      didAutoLocateRef.current = true;
+      getCurrentLocation();
+    }
+  }, [autoLocate, getCurrentLocation, lat, long]);
+
+  const handleCoordinateChange = useCallback((coordinate) => {
+    updateSelectedLocation(coordinate.latitude, coordinate.longitude, false);
+  }, [updateSelectedLocation]);
+
+  if (!region) {
+    return (
+      <View style={[styles.container, styles.emptyContainer, styles.emptyContainerHeight]}>
+        {loading ? (
+          <>
+            <ActivityIndicator size="small" color="#D98579" />
+            <Text style={styles.emptyText}>Finding your current location...</Text>
+          </>
+        ) : null}
+        <TouchableOpacity style={styles.gpsButton} onPress={getCurrentLocation}>
+          <Text style={styles.gpsButtonText}>Use My Current Location</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, {height}]}>
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
+        style={styles.map}
+        initialRegion={region}
+        onPress={event => {
+          const coords = event.nativeEvent?.coordinate;
+          if (coords?.latitude && coords?.longitude) {
+            handleCoordinateChange(coords);
+          }
+        }}
+        onRegionChangeComplete={(newRegion, isGesture) => {
+          const isUserGesture = typeof isGesture === 'object' ? isGesture?.isGesture : isGesture;
+          if (isUserGesture === true && !isDraggingRef.current && newRegion?.latitude && newRegion?.longitude) {
+            handleCoordinateChange(newRegion);
+          }
+        }}
+        showsUserLocation={hasLocationPermission}
+        showsMyLocationButton={false}>
+        {selectedCoordinate ? (
+          <Marker
+            key="static-location-pin"
+            coordinate={selectedCoordinate}
+            draggable
+            tracksViewChanges={false}
+            onDragStart={() => {
+              isDraggingRef.current = true;
+            }}
+            onDragEnd={e => {
+              isDraggingRef.current = false;
+              const coords = e.nativeEvent?.coordinate;
+              if (coords?.latitude && coords?.longitude) {
+                handleCoordinateChange(coords);
+              }
+            }}
+            title="Selected Location"
+            description="Drag this pin or tap the map to adjust"
+          />
+        ) : null}
+      </MapView>
+      <View style={styles.mapHint}>
+        <Text style={styles.mapHintText}>Drag the pin or tap the map to adjust location</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.recenterBtn}
+        onPress={getCurrentLocation}>
+        {loading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.recenterText}>Use My Location</Text>
+        )}
+      </TouchableOpacity>
+      {permissionMessage ? (
+        <TouchableOpacity
+          style={styles.permissionToast}
+          onPress={() => {
+            if (Platform.OS === 'ios') {
+              Linking.openURL('app-settings:');
+            } else {
+              Linking.openSettings();
+            }
+          }}>
+          <Text style={styles.permissionText}>{permissionMessage}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+};
+
+export default React.memo(LocationMap);
+
+const styles = StyleSheet.create({
+  container: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  emptyContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
+    padding: 12,
+  },
+  emptyContainerHeight: {
+    height: 120,
+  },
+  emptyText: {
+    marginTop: 8,
+    color: '#666',
+    fontFamily: Font.Poppins_Regular,
+    fontSize: 12,
+  },
+  map: {
+    width: '100%',
+    height: '100%',
+  },
+  gpsButton: {
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF5F3',
+    borderRadius: 20,
+  },
+  gpsButtonText: {
+    color: '#D98579',
+    fontFamily: Font.Poppins_Medium,
+    fontSize: 13,
+  },
+  mapHint: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  mapHintText: {
+    color: '#444',
+    fontFamily: Font.Poppins_Regular,
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  recenterBtn: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    backgroundColor: '#D98579',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  recenterText: {
+    color: '#fff',
+    fontFamily: Font.Poppins_Medium,
+    fontSize: 11,
+  },
+  permissionToast: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    bottom: 48,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    borderRadius: 10,
+    padding: 8,
+  },
+  permissionText: {
+    color: '#fff',
+    fontFamily: Font.Poppins_Regular,
+    fontSize: 10,
+    textAlign: 'center',
+  },
+});

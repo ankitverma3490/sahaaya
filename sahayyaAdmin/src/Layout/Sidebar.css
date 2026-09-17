@@ -1,0 +1,432 @@
+/* ============================================================
+   ADMIN LAYOUT — Full Responsive with Sidebar Toggle
+   ============================================================ */
+
+/* ---------- LAYOUT SHELL ---------- */
+.admin-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: #f4f6f9;
+}
+
+.admin-body {
+    display: flex;
+    flex: 1;
+    padding-top: 60px; /* header height */
+    position: relative;
+    overflow: visible;
+}
+
+/* ---------- HEADER ---------- */
+.admin-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    z-index: 1100;
+}
+
+.admin-header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+    padding: 0 20px;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* ---------- HAMBURGER TOGGLE BUTTON ---------- */
+.sidebar-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.sidebar-toggle-btn:hover {
+    background: #f0f4f0;
+}
+
+.hamburger-icon {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 22px;
+}
+
+.hamburger-icon span {
+    display: block;
+    height: 2.5px;
+    background: #333;
+    border-radius: 3px;
+    transition: all 0.3s ease;
+    transform-origin: center;
+}
+
+/* Animate to X when open */
+.hamburger-icon.open span:nth-child(1) {
+    transform: translateY(7.5px) rotate(45deg);
+}
+
+.hamburger-icon.open span:nth-child(2) {
+    opacity: 0;
+    transform: scaleX(0);
+}
+
+.hamburger-icon.open span:nth-child(3) {
+    transform: translateY(-7.5px) rotate(-45deg);
+}
+
+/* ---------- BRAND ---------- */
+.brand-text {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.brand-icon {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #D98579, #E8A99E);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.brand-name {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: #1a1a2e;
+    margin: 0;
+}
+
+/* ---------- USER AVATAR (Header) ---------- */
+.user-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #D98579, #E8A99E);
+    color: #fff;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.user-name {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #333;
+    line-height: 1;
+}
+
+.user-role {
+    font-size: 0.75rem;
+    color: #888;
+    margin-top: 2px;
+}
+
+/* ---------- SIDEBAR ---------- */
+.admin-sidebar {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    background: #ffffff;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.07);
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease, width 0.3s ease;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.sidebar-visible {
+    transform: translateX(0);
+}
+
+.sidebar-hidden {
+    transform: translateX(-100%);
+}
+
+/* Mobile: overlay style */
+.sidebar-mobile {
+    position: fixed;
+    z-index: 1200;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+}
+
+/* ---------- SIDEBAR OVERLAY (mobile backdrop) ---------- */
+.sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 1150;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ---------- SIDEBAR INTERNAL ---------- */
+.sidebar-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid #eef0f4;
+}
+
+.sidebar-brand-icon {
+    width: 34px;
+    height: 34px;
+    background: linear-gradient(135deg, #D98579, #E8A99E);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+}
+
+.sidebar-brand-name {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #1a1a2e;
+}
+
+/* ---------- SIDEBAR NAV ---------- */
+.sidebar-nav {
+    flex: 1;
+    padding: 16px 12px;
+    overflow-y: auto;
+}
+
+.sidebar-nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    color: #444 !important;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.25s ease;
+    cursor: pointer;
+}
+
+.sidebar-link:hover {
+    background: #FFF5F3;
+    color: #D98579 !important;
+}
+
+.active-link {
+    background: linear-gradient(127deg, #D98579 4%, #E8A99E 115%);
+    color: #fff !important;
+    box-shadow: 0 4px 12px rgba(217, 133, 121, 0.25);
+}
+
+.active-link .sidebar-icon { background: rgba(255, 255, 255, 0.2) !important; } .active-link .sidebar-icon i { background: none !important; -webkit-text-fill-color: #fff !important; color: #fff !important; }
+
+.sidebar-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    background: #FFF5F3;
+    transition: background 0.25s;
+}
+
+.sidebar-icon i {
+    font-size: 14px;
+    background: linear-gradient(127deg, #D98579, #E8A99E);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.sidebar-link:hover .sidebar-icon {
+    background: #FFE8E4;
+}
+
+.sidebar-label {
+    white-space: nowrap;
+}
+
+/* ---------- SIDEBAR FOOTER USER ---------- */
+.sidebar-footer-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-top: 1px solid #eef0f4;
+    background: #FFF5F3;
+    margin-top: auto;
+}
+
+.sidebar-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #E8A99E;
+    flex-shrink: 0;
+}
+
+.sidebar-user-email {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 170px;
+}
+
+.sidebar-user-role {
+    font-size: 0.7rem;
+    color: #888;
+    text-transform: capitalize;
+}
+
+/* ---------- MAIN CONTENT ---------- */
+.admin-content {
+    flex: 1;
+    min-height: calc(100vh - 60px);
+    transition: margin-left 0.3s ease;
+    overflow: visible;
+}
+
+/* Desktop: push content when sidebar is open */
+.content-shifted {
+    margin-left: 260px;
+}
+
+.content-full {
+    margin-left: 0;
+}
+
+.content-inner {
+    padding: 24px;
+    min-height: 100%;
+}
+
+/* ---------- RESPONSIVE BREAKPOINTS ---------- */
+
+/* Tablet / Mobile (< 992px) */
+@media (max-width: 991.98px) {
+    .content-shifted {
+        margin-left: 0;
+    }
+
+    .content-full {
+        margin-left: 0;
+    }
+
+    .content-inner {
+        padding: 16px;
+    }
+}
+
+/* Small mobile (< 576px) */
+@media (max-width: 575.98px) {
+    .content-inner {
+        padding: 12px;
+    }
+
+    .brand-name {
+        display: none;
+    }
+
+    .admin-header-inner {
+        padding: 0 14px;
+    }
+}
+
+/* ============================================================
+   PAGE-LEVEL RESPONSIVE HELPERS
+   ============================================================ */
+
+/* Tables: horizontal scroll on small screens */
+.table-responsive-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Cards grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+}
+
+/* Form rows */
+.form-row-responsive {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.form-row-responsive > * {
+    flex: 1 1 200px;
+}
+
+/* Responsive heading */
+@media (max-width: 575.98px) {
+    h2, h3 {
+        font-size: 1.2rem !important;
+    }
+
+    h4, h5 {
+        font-size: 1rem !important;
+    }
+}
+

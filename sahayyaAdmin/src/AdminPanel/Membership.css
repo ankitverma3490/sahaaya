@@ -1,0 +1,375 @@
+/* Membership.css */
+
+.membership-container {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    min-height: 100vh;
+    padding-bottom: 3rem;
+}
+
+.membership-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2.5rem;
+}
+
+.membership-title {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #1a1a1a;
+    letter-spacing: -0.5px;
+    margin: 0;
+}
+
+.btn-add-plan {
+    background: linear-gradient(135deg, #D98579 0%, #E8A99E 100%);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    border: none;
+    font-weight: 600;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 15px rgba(217, 133, 121, 0.2);
+}
+
+.btn-add-plan:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(217, 133, 121, 0.3);
+    background: linear-gradient(135deg, #C76C60 0%, #D98579 100%);
+}
+
+/* Plan Cards */
+.plan-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 2rem;
+    margin-bottom: 4rem;
+}
+
+.plan-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    border-radius: 24px;
+    padding: 2.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+}
+
+.plan-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    border-color: #4caf50;
+}
+
+.plan-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+    background: linear-gradient(to bottom, #D98579, #E8A99E);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.plan-card:hover::before {
+    opacity: 1;
+}
+
+.plan-badge {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: rgba(217, 133, 121, 0.1);
+    color: #D98579;
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.plan-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+.plan-description {
+    color: #666;
+    font-size: 0.95rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+.plan-price-container {
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    margin-bottom: 2rem;
+}
+
+.plan-price-symbol {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.plan-price {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #1a1a1a;
+}
+
+.plan-price-period {
+    color: #888;
+    font-weight: 500;
+}
+
+.plan-stats {
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 12px;
+}
+
+.plan-stat-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.plan-stat-label {
+    color: #666;
+}
+
+.plan-stat-value {
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.plan-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 2rem 0;
+    flex-grow: 1;
+}
+
+.plan-feature-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.8rem;
+    font-size: 0.95rem;
+    color: #444;
+}
+
+.plan-feature-icon {
+    color: #4caf50;
+    font-size: 1.1rem;
+}
+
+.plan-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.btn-plan-edit {
+    background: #fff;
+    border: 1px solid #ddd;
+    color: #555;
+    padding: 0.6rem;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-plan-edit:hover {
+    background: #f0f0f0;
+    border-color: #ccc;
+}
+
+.btn-plan-delete {
+    background: rgba(220, 53, 69, 0.05);
+    border: 1px solid rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+    padding: 0.6rem;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-plan-delete:hover {
+    background: #dc3545;
+    color: white;
+}
+
+/* Modal Styling */
+.premium-modal .modal-content {
+    border-radius: 24px;
+    border: none;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+
+.premium-modal .modal-header {
+    background: #D98579;
+    color: white;
+    padding: 2rem;
+    border: none;
+}
+
+.premium-modal .modal-title {
+    font-weight: 700;
+    font-size: 1.5rem;
+}
+
+.premium-modal .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+.premium-modal .modal-body {
+    padding: 2.5rem;
+}
+
+.premium-form-label {
+    font-weight: 600;
+    color: #444;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.premium-input {
+    border: 1.5px solid #eee;
+    padding: 0.8rem 1rem;
+    border-radius: 12px;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    margin-bottom: 1.5rem;
+    background: #fbfbfb;
+}
+
+.premium-input:focus {
+    border-color: #D98579;
+    box-shadow: 0 0 0 4px rgba(217, 133, 121, 0.1);
+    background: white;
+    outline: none;
+}
+
+.feature-input-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.btn-save-plan {
+    background: linear-gradient(135deg, #D98579 0%, #E8A99E 100%);
+    color: white;
+    width: 100%;
+    padding: 1rem;
+    border-radius: 12px;
+    border: none;
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-top: 1rem;
+    transition: all 0.3s ease;
+}
+
+.btn-save-plan:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(217, 133, 121, 0.2);
+}
+
+.btn-save-plan:disabled {
+    opacity: 0.7;
+    transform: none;
+}
+
+/* Subscription History Component Override */
+.subscription-history-card {
+    background: white;
+    border-radius: 24px;
+    padding: 2.5rem;
+    border: 1px solid #eee;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+.premium-table {
+    border-collapse: separate;
+    border-spacing: 0 0.5rem;
+}
+
+.premium-table thead th {
+    background: transparent;
+    border: none;
+    color: #888;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 1rem;
+}
+
+.premium-table tbody tr {
+    background: #fcfcfc;
+    transition: all 0.2s ease;
+}
+
+.premium-table tbody tr:hover {
+    background: #f8f9fa;
+    transform: scale(1.002);
+}
+
+.premium-table tbody td {
+    padding: 1.25rem 1rem;
+    border-top: 1px solid #f0f0f0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.premium-table tbody td:first-child {
+    border-left: 1px solid #f0f0f0;
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+}
+
+.premium-table tbody td:last-child {
+    border-right: 1px solid #f0f0f0;
+    border-top-right-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+.status-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+.status-active {
+    background: rgba(46, 204, 113, 0.1);
+    color: #27ae60;
+}
+
+.status-inactive {
+    background: rgba(149, 165, 166, 0.1);
+    color: #7f8c8d;
+}
+
+.user-name {
+    font-weight: 700;
+    color: #1a1a1a;
+}

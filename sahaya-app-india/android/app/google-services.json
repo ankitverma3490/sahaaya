@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "521377897719",
+    "project_id": "sahayya-a6422",
+    "storage_bucket": "sahayya-a6422.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:521377897719:android:eaf5e1fc5affb9e43f47f2",
+        "android_client_info": {
+          "package_name": "com.sahayya"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwxFFFkJqQXur_CHAYDClgj7QbHfbOmKE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
