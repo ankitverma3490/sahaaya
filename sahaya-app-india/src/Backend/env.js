@@ -12,28 +12,27 @@
 // ===========================================
 import { Platform } from 'react-native';
 
-export const APP_ENV = 'development'; // 'development' | 'production'
+export const APP_ENV = 'production'; // 'development' | 'production'
 
 // ===========================================
 // MAIN BACKEND API
 // ===========================================
-// Production URL (Remote)
-const PRODUCTION_API_URL = 'https://sahayaa-backend-production.up.railway.app/api/';
+// Production URL (Remote Live Backend)
+const PRODUCTION_API_URL = 'https://sahaaya-production-8076.up.railway.app/api/';
 
 // Local Development Settings
-// - Your machine's local Wi-Fi IP (connect phone to same Wi-Fi):
+// - Your machine's local Wi-Fi IP:
 export const LOCAL_IP = '192.168.1.4';
 export const LOCAL_PORT = '8000';
 
 const getDevelopmentApiUrl = () => {
-  // Uses machine Wi-Fi IP so APK on physical phone connects directly to backend
   return `http://${LOCAL_IP}:${LOCAL_PORT}/api/`;
 };
 
 const DEVELOPMENT_API_URL = getDevelopmentApiUrl();
 
-// Active Backend URL: Connects to local backend in 'development' mode
-export const BASE_URL = APP_ENV === 'development' ? DEVELOPMENT_API_URL : PRODUCTION_API_URL;
+// Active Backend URL: Uses Live Railway backend in production
+export const BASE_URL = APP_ENV === 'production' ? PRODUCTION_API_URL : DEVELOPMENT_API_URL;
 
 // ===========================================
 // RAZORPAY PAYMENT GATEWAY
