@@ -55,24 +55,27 @@ class AppServiceProvider extends ServiceProvider
             return;
         }
         
-        if (!Cache::has('attendance_last_run')) {
-            Artisan::call('attendance:auto-mark');
-            Cache::put('attendance_last_run', now(), 60); // run once per minute
+        try {
+            if (!Cache::has('attendance_last_run')) {
+                Artisan::call('attendance:auto-mark');
+                Cache::put('attendance_last_run', now(), 60); // run once per minute
+            }
+
+            $youtube   = Setting::where('key','Social.youtube')->first();
+            $facebook  = Setting::where('key','Social.facebook')->first();
+            $twitter   = Setting::where('key','Social.twitter')->first();
+            $linkedin  = Setting::where('key','Social.linkedin')->first();
+            $copyright = Setting::where('key','Site.right')->first();
+
+            View::share(compact(
+                'youtube',
+                'facebook',
+                'twitter',
+                'linkedin',
+                'copyright'
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('AppServiceProvider boot DB error: ' . $e->getMessage());
         }
-
-
-        $youtube   = Setting::where('key','Social.youtube')->first();
-        $facebook  = Setting::where('key','Social.facebook')->first();
-        $twitter   = Setting::where('key','Social.twitter')->first();
-        $linkedin  = Setting::where('key','Social.linkedin')->first();
-        $copyright = Setting::where('key','Site.right')->first();
-
-        View::share(compact(
-            'youtube',
-            'facebook',
-            'twitter',
-            'linkedin',
-            'copyright'
-        ));
     }
 }

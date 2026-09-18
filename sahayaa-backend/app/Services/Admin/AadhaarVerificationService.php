@@ -169,10 +169,15 @@ class AadhaarVerificationService
                     'response' => $data
                 ]);
 
+                $isStatusExplicitlyFalse = isset($data['status']) && ($data['status'] === false || $data['status'] === 'false' || $data['status'] === 0 || $data['status'] === '0');
+                $isSuccessExplicitlyFalse = isset($data['success']) && ($data['success'] === false || $data['success'] === 'false' || $data['success'] === 0 || $data['success'] === '0');
+
                 $isApiSuccess = $response->successful() 
+                    && !$isStatusExplicitlyFalse
+                    && !$isSuccessExplicitlyFalse
                     && !empty($data['data']) 
-                    && (isset($data['status']) ? ($data['status'] === true || $data['status'] === 200 || $data['status'] === 'success' || $data['status'] === '1') : true)
-                    && (isset($data['status_code']) ? $data['status_code'] === 200 : true);
+                    && (isset($data['status_code']) ? in_array($data['status_code'], [200, '200'], true) : true)
+                    && (!empty($data['data']['full_name']) || !empty($data['data']['name']) || !empty($data['data']['aadhaar_number']) || !empty($data['data']['dob']) || !empty($data['data']['address']) || !empty($data['data']['photo']) || (isset($data['status']) && in_array($data['status'], [true, 'true', 1, '1', 200, 'success'], true)));
 
                 if ($isApiSuccess) {
                     return [
@@ -216,7 +221,7 @@ class AadhaarVerificationService
                     'message' => $isTempUnavailable
                         ? 'Aadhaar service is temporarily busy. Please try again in a moment.'
                         : $errorMsg,
-                    'error' => $data['error'] ?? 'Invalid OTP or reference ID',
+                    'error' => $data['error'] ?? $errorMsg,
                     'data' => $data
                 ];
 

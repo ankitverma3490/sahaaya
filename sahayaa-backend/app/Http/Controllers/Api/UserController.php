@@ -840,62 +840,89 @@ public function getProfile(Request $request)
     {
         try {
             $validator = Validator::make($request->all(), [
-            'otp' => 'required|digits:6'
-        ]);
+                'otp' => 'required|digits:6'
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'The OTP must be 6 digits.',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
 
-        \Log::info('Aadhaar Verify Request Input:', [
-            'user_id' => $request->user_id,
-            'auth_user_id' => Auth::guard('api')->check() ? Auth::guard('api')->user()->id : 'not_authed',
-            'has_otp' => $request->has('otp')
-        ]);
+            \Log::info('Aadhaar Verify Request Input:', [
+                'user_id' => $request->user_id,
+                'auth_user_id' => Auth::guard('api')->check() ? Auth::guard('api')->user()->id : 'not_authed',
+                'has_otp' => $request->has('otp')
+            ]);
 
-        $targetUserId = $request->user_id ?? (Auth::guard('api')->check() ? Auth::guard('api')->id() : null);
+            $targetUserId = $request->user_id ?? (Auth::guard('api')->check() ? Auth::guard('api')->id() : null);
 
-        if (!$targetUserId) {
-            return response()->json(['error' => 'Authentication required or user_id missing.'], 401);
-        }
+            $user = null;
+            if ($targetUserId) {
+                $user = User::find($targetUserId);
+            }
+            if (!$user && $request->filled('aadhar_number')) {
+                $user = User::where('aadhar_number', $request->aadhar_number)
+                    ->whereNotNull('aadhar_reference_id')
+                    ->latest()
+                    ->first();
+            }
 
-        $user = User::find($targetUserId);
-        
-        if (!$user) {
-            return response()->json(['error' => 'User not found.'], 404);
-        }
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Authentication required or user_id missing.',
+                    'message' => 'User not found. Please request an OTP first.'
+                ], 401);
+            }
 
-        if (!$user->aadhar_reference_id) {
-            return response()->json([
-                'error' => 'No OTP request found for this user.',
-                'debug_user_id' => $user->id,
-                'debug_name' => $user->name,
-                'message' => 'Please request a new OTP first.'
-            ], 422);
-        }
+            if (!$user->aadhar_reference_id && $request->filled('aadhar_number')) {
+                $matchedUser = User::where('aadhar_number', $request->aadhar_number)
+                    ->whereNotNull('aadhar_reference_id')
+                    ->latest()
+                    ->first();
+                if ($matchedUser && !empty($matchedUser->aadhar_reference_id)) {
+                    $user = $matchedUser;
+                }
+            }
+
+            if (!$user->aadhar_reference_id) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'No OTP request found for this user.',
+                    'debug_user_id' => $user->id,
+                    'debug_name' => $user->name,
+                    'message' => 'Please request a new OTP first.'
+                ], 422);
+            }
 
             $aadhaarService = new \App\Services\Admin\AadhaarVerificationService();
-        try {
-            $verifyResult = $aadhaarService->verifyOtp($request->otp, $user->aadhar_reference_id);
-            \Log::info('Aadhaar verify raw result', [
-                'user_id' => $user->id,
-                'success' => $verifyResult['success'] ?? false,
-                'aadhaar_data' => $verifyResult['aadhaar_data'] ?? null,
-                'raw_data_keys' => is_array($verifyResult['raw_data'] ?? null) ? array_keys($verifyResult['raw_data']) : null,
-            ]);
-        } catch (\Illuminate\Http\Client\ConnectionException $connEx) {
-            \Log::error('Aadhaar external API unreachable: ' . $connEx->getMessage());
-            return response()->json([
-                'error' => 'Aadhaar verification service is temporarily unavailable. Please try again in a moment.',
-                'message' => 'External service timeout'
-            ], 503);
-        }
-        
-        if (!$verifyResult['success']) {
-            return response()->json([
-                'error' => $verifyResult['message'] ?? 'Invalid OTP'
-            ], 422);
-        }
+            try {
+                $verifyResult = $aadhaarService->verifyOtp($request->otp, $user->aadhar_reference_id);
+                \Log::info('Aadhaar verify raw result', [
+                    'user_id' => $user->id,
+                    'success' => $verifyResult['success'] ?? false,
+                    'aadhaar_data' => $verifyResult['aadhaar_data'] ?? null,
+                    'raw_data_keys' => is_array($verifyResult['raw_data'] ?? null) ? array_keys($verifyResult['raw_data']) : null,
+                ]);
+            } catch (\Illuminate\Http\Client\ConnectionException $connEx) {
+                \Log::error('Aadhaar external API unreachable: ' . $connEx->getMessage());
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Aadhaar verification service is temporarily unavailable. Please try again in a moment.',
+                    'message' => 'Aadhaar verification service is temporarily unavailable. Please try again in a moment.'
+                ], 503);
+            }
+            
+            if (!$verifyResult['success']) {
+                return response()->json([
+                    'status' => false,
+                    'error' => $verifyResult['message'] ?? 'Invalid OTP',
+                    'message' => $verifyResult['message'] ?? 'Invalid OTP'
+                ], 422);
+            }
             
             // Update user with verified Aadhaar details
             $aadhaarData = $verifyResult['aadhaar_data'];
@@ -3493,6 +3520,7 @@ public function saveAadharAndSendOtp(Request $request)
             'message' => 'OTP sent to Aadhaar registered mobile number',
             'reference_id' => $otpResult['reference_id'],
             'data' => [
+                'user_id' => $user->id,
                 'aadhar_number' => $user->aadhar_number,
             ]
         ], 200);
@@ -3727,7 +3755,23 @@ public function saveAadharAndSendOtp(Request $request)
     public function resendAadharOtp(Request $request)
     {
         try {
-            $user = Auth::guard('api')->user();
+            $user = ($request->filled('user_id') ? User::find($request->user_id) : null) ?? Auth::guard('api')->user();
+            
+            if (!$user && $request->filled('aadhar_number')) {
+                $user = User::where('aadhar_number', $request->aadhar_number)->latest()->first();
+            }
+
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not found. Please save Aadhaar number first.'
+                ], 404);
+            }
+
+            if ($request->filled('aadhar_number') && empty($user->aadhar_number)) {
+                $user->aadhar_number = $request->aadhar_number;
+                $user->save();
+            }
             
             // Check if Aadhar number exists
             if (!$user->aadhar_number) {
@@ -3765,6 +3809,7 @@ public function saveAadharAndSendOtp(Request $request)
                 'message' => 'OTP resent successfully',
                 'reference_id' => $otpResult['reference_id'],
                 'data' => [
+                    'user_id' => $user->id,
                     'aadhar_number' => $user->aadhar_number,
                 ]
             ], 200);

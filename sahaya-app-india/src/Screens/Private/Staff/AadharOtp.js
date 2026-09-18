@@ -10,15 +10,18 @@ import HeaderForUser from '../../../Component/HeaderForUser';
 import { POST_FORM_DATA } from '../../../Backend/Backend';
 import { AADHAR_SAVE, AADHAR_VERFIY } from '../../../Backend/api_routes';
 import LocalizedStrings from '../../../Constants/localization';
+import { useDispatch } from 'react-redux';
+import { userDetails } from '../../../Redux/action';
 
 const AadharOtp = ({ navigation, route }) => {
   const [otp, setOtp] = useState('');
   const [resendTimer, setResendTimer] = useState(30); // 30 sec timer
   const [otpError, setOtpError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { mobile } = route?.params || {};
-  const last4 = mobile?.toString()?.slice(-4);
-
+  const dispatch = useDispatch();
+  const { mobile, aadhar_number, user_id, is_staff_add } = route?.params || {};
+  const effectiveAadhaar = aadhar_number || mobile;
+  const last4 = effectiveAadhaar?.toString()?.slice(-4);
 
   useEffect(() => {
     let timer;
@@ -39,7 +42,16 @@ const AadharOtp = ({ navigation, route }) => {
   // Resend OTP function
   const handleResend = () => {
     let data = new FormData();
-    data?.append('aadhar_number', route?.params?.aadhar_number || mobile);
+    if (effectiveAadhaar) {
+      data?.append('aadhar_number', String(effectiveAadhaar));
+    }
+    if (user_id) {
+      data?.append('user_id', String(user_id));
+    }
+    if (is_staff_add !== undefined) {
+      data?.append('is_staff_add', String(is_staff_add));
+    }
+
     POST_FORM_DATA(
       AADHAR_SAVE,
       data,
@@ -48,7 +60,7 @@ const AadharOtp = ({ navigation, route }) => {
         setResendTimer(30);
       },
       error => {
-        let errorMsg = 'Invalid OTP. Please try again.';
+        let errorMsg = 'Failed to resend OTP. Please try again.';
         if (error?.data?.message) {
           errorMsg = error.data.message;
         } else if (error?.data?.error) {
@@ -79,12 +91,14 @@ const AadharOtp = ({ navigation, route }) => {
 
     let data = new FormData();
     data?.append('otp', String(otp));
-    if (route?.params?.aadhar_number) {
-      data?.append('aadhar_number', String(route.params.aadhar_number));
+    if (effectiveAadhaar) {
+      data?.append('aadhar_number', String(effectiveAadhaar));
     }
-    const userId = route?.params?.user_id;
-    if (userId) {
-      data?.append('user_id', String(userId));
+    if (user_id) {
+      data?.append('user_id', String(user_id));
+    }
+    if (is_staff_add !== undefined) {
+      data?.append('is_staff_add', String(is_staff_add));
     }
 
     try {
@@ -94,7 +108,15 @@ const AadharOtp = ({ navigation, route }) => {
         success => {
           try {
             setLoading(false);
-            dispatch(userDetails(success?.user));
+            if (success?.status === false || success?.success === false) {
+              const errMsg = success?.message || success?.error || 'Invalid OTP. Please try again.';
+              setOtpError(errMsg);
+              return;
+            }
+            const verifiedUser = success?.user || success?.data?.user || success?.data;
+            if (verifiedUser && typeof verifiedUser === 'object') {
+              dispatch(userDetails(verifiedUser));
+            }
             navigation?.navigate('StepFirst');
           } catch (e) {
             setLoading(false);

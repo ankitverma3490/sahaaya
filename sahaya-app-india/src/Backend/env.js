@@ -10,25 +10,36 @@
 // ===========================================
 // ENVIRONMENT SETTINGS
 // ===========================================
+import { Platform } from 'react-native';
+
 export const APP_ENV = 'development'; // 'development' | 'production'
 
 // ===========================================
 // MAIN BACKEND API
 // ===========================================
-// Production URL
+// Production URL (Remote)
 const PRODUCTION_API_URL = 'https://sahayaa-backend-production.up.railway.app/api/';
-// Local Development URL
-const DEVELOPMENT_API_URL = 'https://sahayaa-backend-production.up.railway.app/api/';
 
+// Local Development Settings
+// - Your machine's local Wi-Fi IP (connect phone to same Wi-Fi):
+export const LOCAL_IP = '192.168.1.4';
+export const LOCAL_PORT = '8000';
 
-// Use production URL by default, switch to development URL for local testing
-export const BASE_URL = PRODUCTION_API_URL;
+const getDevelopmentApiUrl = () => {
+  // Uses machine Wi-Fi IP so APK on physical phone connects directly to backend
+  return `http://${LOCAL_IP}:${LOCAL_PORT}/api/`;
+};
+
+const DEVELOPMENT_API_URL = getDevelopmentApiUrl();
+
+// Active Backend URL: Connects to local backend in 'development' mode
+export const BASE_URL = APP_ENV === 'development' ? DEVELOPMENT_API_URL : PRODUCTION_API_URL;
 
 // ===========================================
 // RAZORPAY PAYMENT GATEWAY
 // ===========================================
-// Razorpay Payment API Base URL (for create-order, verify-payment, etc.)
-export const RAZORPAY_API_URL = 'https://sahayaa-backend-production.up.railway.app/api/';
+// Razorpay Payment API Base URL
+export const RAZORPAY_API_URL = BASE_URL;
 
 // The public checkout key is safe to ship in the mobile app. The secret key
 // must remain on the backend and is never needed by the client.
