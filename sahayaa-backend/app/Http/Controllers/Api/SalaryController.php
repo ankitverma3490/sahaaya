@@ -292,16 +292,16 @@ class SalaryController extends Controller
                 ], 404);
             }
 
-            // Double-click protection (Idempotency - 10s window)
-            $currentPeriod = date('F Y');
+            // Double-click protection and duplicate period protection
+            $currentPeriod = $request->salary_period ?? date('F Y');
             if (Payment::where('staff_id', $user_id)
                 ->where('user_id', Auth::guard('api')->id())
                 ->where('salary_period', $currentPeriod)
-                ->where('created_at', '>=', now()->subSeconds(10))
+                ->whereIn('status', ['paid', 'pending', 'processing'])
                 ->exists()) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Processing payment, please wait...'
+                    'message' => 'Salary for this period has already been paid or is currently processing.'
                 ], 400);
             }
 
