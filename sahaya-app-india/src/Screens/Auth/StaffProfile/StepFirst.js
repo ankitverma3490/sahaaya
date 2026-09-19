@@ -19,8 +19,9 @@ import LocalizedStrings from '../../../Constants/localization';
 import SimpleToast from 'react-native-simple-toast';
 
 import ProfileStepRoller from '../../../Component/UI/ProfileStepRoller';
+import { CommonActions } from '@react-navigation/native';
 
-const StepFirst = () => {
+const StepFirst = ({ navigation }) => {
   const staffSteps = [
     { id: 1, title: 'Personal', icon: ImageConstant.person },
     { id: 2, title: 'KYC', icon: ImageConstant.Verify },
@@ -80,6 +81,13 @@ const StepFirst = () => {
     );
     if (global.Profile) global.Profile();
     Dispatch(userDetails({ ...userDetail, is_staff_added: 1, step: 5 }));
+    
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'TabNavigationForStaff' }],
+      })
+    );
   };
 
   return (
