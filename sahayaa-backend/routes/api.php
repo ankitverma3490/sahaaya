@@ -442,7 +442,11 @@ Route::get('/debug-attendance-today', function () {
 });
 
 // TEMP PROOF: Hit Digio API directly and show raw response
+// Gated: only available when APP_DEBUG=true (never in production).
 Route::get('/proof/aadhaar-response', function () {
+    if (!config('app.debug')) {
+        return response()->json(['message' => 'Not available in production'], 403);
+    }
     $aadhaar = request('aadhaar', '320022426647');
     $service = new \App\Services\Admin\AadhaarVerificationService();
     $result = $service->sendOtp($aadhaar);
@@ -491,8 +495,11 @@ Route::get('/debug-staff-data', function () {
 });
 
 // Secret key protected - sirf tumhare liye
+// Secret is read from env (ATTENDANCE_CRON_SECRET) with legacy fallback so
+// existing cron jobs keep working while the hardcoded value can be rotated out.
 Route::get('/run-auto-attendance/{secret}', function ($secret) {
-    if ($secret !== 'sahayya2026secure') {
+    $expected = env('ATTENDANCE_CRON_SECRET', 'sahayya2026secure');
+    if ($secret !== $expected || $expected === '') {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -597,8 +604,10 @@ Route::get('/run-auto-attendance/{secret}', function ($secret) {
 });
 // One-shot: clean duplicate attendance rows AND add unique index.
 // Safe to call multiple times (migration guards against re-adding index).
+// Maintenance route: requires secret AND non-production debug flag.
 Route::get('/fix-attendance-duplicates/{secret}', function ($secret) {
-    if ($secret !== 'sahayya2026secure') {
+    $expected = env('ATTENDANCE_CRON_SECRET', 'sahayya2026secure');
+    if ($secret !== $expected || $expected === '' || !config('app.debug')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
     try {
@@ -638,8 +647,10 @@ Route::get('/fix-attendance-duplicates/{secret}', function ($secret) {
 // One-shot: delete attendance records for a given date that belong to staff
 // whose working_days don't include that day (or whose working_days are null →
 // default Mon-Sat, so Sunday is off-day).
+// Maintenance route: requires secret AND non-production debug flag.
 Route::get('/fix-wrong-day-attendance/{secret}', function ($secret) {
-    if ($secret !== 'sahayya2026secure') {
+    $expected = env('ATTENDANCE_CRON_SECRET', 'sahayya2026secure');
+    if ($secret !== $expected || $expected === '' || !config('app.debug')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
     try {

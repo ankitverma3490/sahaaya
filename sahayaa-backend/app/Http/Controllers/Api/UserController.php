@@ -3348,8 +3348,9 @@ public function saveAadharAndSendOtp(Request $request)
         // =============================
         if ($request->is_staff_add == 1) {
 
-            // Check if Aadhaar already belongs to someone
-            $existingUser = User::where('aadhar_number', $request->aadhar_number)->first();
+            // Check if Aadhaar already belongs to someone (normalized match)
+            $existingUser = User::where('aadhar_number', $request->aadhar_number)->first()
+                ?? User::whereRaw("REPLACE(aadhar_number, ' ', '') = ?", [$request->aadhar_number])->first();
             
             if ($authUser && $authUser->aadhar_number == $request->aadhar_number) {
                 return response()->json([
@@ -3414,14 +3415,28 @@ public function saveAadharAndSendOtp(Request $request)
             $targetUser->aadhar_number_otp_expire_at = Carbon::now()->addMinutes(10);
             $targetUser->aadhar__verify = false;
 
+            // Never steal another account's phone number onto this stub/target row.
+            $proposedPhone = null;
             if ($request->filled('phone_number')) {
-                $targetUser->phone_number = $request->phone_number;
+                $proposedPhone = preg_replace('/[^0-9]/', '', (string) $request->phone_number);
             } elseif ($request->filled('mobile_number')) {
-                $targetUser->phone_number = $request->mobile_number;
+                $proposedPhone = preg_replace('/[^0-9]/', '', (string) $request->mobile_number);
             } elseif (!empty($otpResult['data']['mobile_number']) || !empty($otpResult['data']['data']['mobile_number'])) {
                 $otpPhone = $otpResult['data']['mobile_number'] ?? $otpResult['data']['data']['mobile_number'] ?? null;
                 if ($otpPhone && strpos($otpPhone, 'X') === false) {
-                    $targetUser->phone_number = preg_replace('/[^0-9]/', '', $otpPhone);
+                    $proposedPhone = preg_replace('/[^0-9]/', '', $otpPhone);
+                }
+            }
+            if ($proposedPhone !== null && $proposedPhone !== '') {
+                if (strlen($proposedPhone) > 10) {
+                    $proposedPhone = substr($proposedPhone, -10);
+                }
+                $phoneOwner = User::where('phone_number', $proposedPhone)
+                    ->where('id', '!=', $targetUser->id ?? 0)
+                    ->first();
+                // Only apply the phone if this row already owns it, or nobody else does.
+                if (!$phoneOwner || (int) $phoneOwner->id === (int) ($targetUser->id ?? 0)) {
+                    $targetUser->phone_number = $proposedPhone;
                 }
             }
 
@@ -4949,47 +4964,93 @@ public function addStaff(Request $request)
             $request->merge(['joining_date' => $this->parseDateToYmd($request->joining_date)]);
         }
 
+        // ── Normalize identifiers so format variants never create duplicates ──
+        $cleanAadhar = preg_replace('/\D/', '', (string) $request->aadhar_number);
+        $cleanPhone  = preg_replace('/\D/', '', (string) $request->phone_number);
+        if ($cleanAadhar !== '') {
+            $request->merge(['aadhar_number' => $cleanAadhar]);
+        }
+        if ($cleanPhone !== '') {
+            // Keep last 10 digits for local numbers so +91/0-prefix still matches
+            $request->merge(['phone_number' => strlen($cleanPhone) > 10 ? substr($cleanPhone, -10) : $cleanPhone]);
+        }
+
+        // Prefer user_id the app already sends after Aadhaar OTP (never treat auth user as the staff target)
+        $existingByUserId = null;
+        if ($request->filled('user_id') && (int) $request->user_id !== (int) ($authUser->id ?? 0)) {
+            $existingByUserId = User::withTrashed()->find((int) $request->user_id);
+        }
+
         // ── SECURITY: Aadhaar OTP verification is MANDATORY ──────────────────
         // Staff can ONLY be added after Aadhaar OTP has been verified.
         // This prevents owners from adding staff without the staff's knowledge.
         if (!empty($request->aadhar_number)) {
-            // Use withTrashed() for the re-hire lookup below, but for the
-            // Aadhaar verify check prefer the ACTIVE user so a soft-deleted
-            // record with the same Aadhaar doesn't block the new staff.
-            $existingByAadhar = User::withTrashed()->where('aadhar_number', $request->aadhar_number)->first();
-            $activeByAadhar   = User::where('aadhar_number', $request->aadhar_number)->first();
+            // Prefer ACTIVE (non-deleted) user. withTrashed() only as fallback for re-hire.
+            // Normalized match so "1234 5678 9012" and "123456789012" hit the same row.
+            $activeByAadhar   = User::whereRaw("REPLACE(aadhar_number, ' ', '') = ?", [$request->aadhar_number])->first()
+                ?? User::where('aadhar_number', $request->aadhar_number)->first();
+            $existingByAadhar = $activeByAadhar ?? User::withTrashed()->whereRaw("REPLACE(aadhar_number, ' ', '') = ?", [$request->aadhar_number])->first()
+                ?? User::withTrashed()->where('aadhar_number', $request->aadhar_number)->first();
             $verifyUser       = $activeByAadhar ?? $existingByAadhar;
-            if ($verifyUser && !$verifyUser->aadhar__verify) {
+
+            // OTP check: skip if this is a job-application flow (employer is approving
+            // an already-registered staff member — they verified identity when applying).
+            // Only block if the found user has NEVER verified their Aadhaar AND there is
+            // no job_id linking this to an application (i.e., direct manual add by employer).
+            $isJobApplicationFlow = !empty($request->job_id) || !empty($request->application_user_id);
+            if ($verifyUser && !$verifyUser->aadhar__verify && !$isJobApplicationFlow) {
                 DB::rollBack();
                 return response()->json([
-                    'status' => false,
+                    'status'  => false,
                     'message' => 'Aadhaar OTP verification is required before adding staff. Please complete the OTP verification process first.',
                 ], 403);
             }
         } else {
             DB::rollBack();
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Aadhaar number is required to add staff.',
             ], 422);
         }
         // ────────────────────────────────────────────────────────────────────
 
-        // ── PRE-VALIDATION: check by Aadhar OR phone FIRST ──────────────────
-        // $existingByAadhar already set above from the OTP gate check.
-        // Use withTrashed() so previously removed staff can be re-hired.
-        $existingByPhone  = User::withTrashed()->where('phone_number', $request->phone_number)->first();
-
-        // If found by aadhar → re-hire regardless of phone
-        if ($existingByAadhar) {
-            $existingByAadhar->update(['user_role_id' => 2]);
-            return $this->updateExistingStaff($existingByAadhar, $request);
+        // ── PRE-VALIDATION: check by user_id OR Aadhar OR phone FIRST ───────
+        // $existingByAadhar already resolved above (active record preferred).
+        // Also check by phone in case Aadhaar is missing on the existing record.
+        $existingByPhone = null;
+        if (!$existingByAadhar && $cleanPhone !== '') {
+            $existingByPhone = User::where('phone_number', $request->phone_number)->first()
+                ?? User::withTrashed()->where('phone_number', $request->phone_number)->first();
         }
 
-        // If found by phone only (no aadhar match) → could be a different person.
-        // Still try to re-hire: treat as the same person being re-added.
-        // If it turns out to be a conflict the employer will see the updated record.
+        // Canonical target: user_id from OTP flow, else Aadhaar match, else phone match.
+        // This is what prevents a second row when the owner only tweaks the phone number.
+        $existingTarget = $existingByAadhar ?? $existingByUserId;
+
+        // If found by Aadhaar or OTP user_id → link/update existing record (NEVER create duplicate)
+        if ($existingTarget) {
+            // Restore if soft-deleted
+            if ($existingTarget->trashed()) {
+                $existingTarget->restore();
+            }
+            // Aadhaar wins: if OTP stub/user_id row is missing this Aadhaar, stamp it on.
+            if (!empty($request->aadhar_number) && $existingTarget->aadhar_number !== $request->aadhar_number) {
+                $aadharClash = User::where('id', '!=', $existingTarget->id)
+                    ->whereRaw("REPLACE(aadhar_number, ' ', '') = ?", [$request->aadhar_number])
+                    ->first();
+                if (!$aadharClash) {
+                    $existingTarget->aadhar_number = $request->aadhar_number;
+                }
+            }
+            $existingTarget->update(['user_role_id' => 2]);
+            return $this->updateExistingStaff($existingTarget, $request);
+        }
+
+        // If found by phone only → link/update existing record
         if ($existingByPhone) {
+            if ($existingByPhone->trashed()) {
+                $existingByPhone->restore();
+            }
             $existingByPhone->update(['user_role_id' => 2]);
             return $this->updateExistingStaff($existingByPhone, $request);
         }
@@ -4999,7 +5060,7 @@ public function addStaff(Request $request)
         // we already handled the existing-user cases above).
         $validator = Validator::make($request->all(), [
             'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
+            'last_name' => 'nullable|string|max:255',
             'email' => 'nullable|email|unique:users,email',
             'phone_number' => 'required|string|max:15|unique:users,phone_number',
             'phone_number_country_code' => 'required|string|max:5',
@@ -5025,8 +5086,8 @@ public function addStaff(Request $request)
             'working_days' => 'nullable|array',
             'preferred_work_location' => 'nullable|string|max:255',
             'languages_spoken' => 'nullable',
-            // Aadhar details
-            'aadhar_number' => 'required',
+            // Aadhar details — one human = one row (blocks duplicate staff)
+            'aadhar_number' => 'required|string|digits:12|unique:users,aadhar_number',
             // Document files (optional)
             'staff_photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
             'aadhar_front' => 'nullable|file|mimes:jpeg,png,jpg,pdf|max:10240',
@@ -5073,7 +5134,7 @@ public function addStaff(Request $request)
                     'timestamp' => now()->toDateTimeString()
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Staff photo upload failed', [
                 'action' => $logAction,
                 'error' => $e->getMessage(),
@@ -5092,7 +5153,7 @@ public function addStaff(Request $request)
                     'timestamp' => now()->toDateTimeString()
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Aadhar front photo upload failed', [
                 'action' => $logAction,
                 'error' => $e->getMessage(),
@@ -5110,7 +5171,7 @@ public function addStaff(Request $request)
                     'timestamp' => now()->toDateTimeString()
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Aadhar back photo upload failed', [
                 'action' => $logAction,
                 'error' => $e->getMessage(),
@@ -5129,7 +5190,7 @@ public function addStaff(Request $request)
                     'timestamp' => now()->toDateTimeString()
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Police clearance certificate upload failed', [
                 'action' => $logAction,
                 'error' => $e->getMessage(),
@@ -5157,7 +5218,7 @@ public function addStaff(Request $request)
                 'user_role_id' => 2, 
                 'first_name' => $request->first_name,
                 'last_name' => $request->last_name,
-                'name' => $request->first_name . ' ' . $request->last_name,
+                'name' => trim($request->first_name . ' ' . ($request->last_name ?? '')),
                 'email' => $request->email,
                 'phone_number' => $request->phone_number,
                 'phone_number_country_code' => $request->phone_number_country_code,
@@ -5208,7 +5269,7 @@ public function addStaff(Request $request)
                 'created_at' => $staff->created_at,
                 'timestamp' => now()->toDateTimeString()
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Failed to create staff user record', [
                 'action' => $logAction,
                 'error' => $e->getMessage(),
@@ -5267,7 +5328,7 @@ public function addStaff(Request $request)
                     'timestamp' => now()->toDateTimeString()
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Failed to create staff address record', [
                 'action' => $logAction,
                 'staff_id' => $staff->id,
@@ -5280,11 +5341,23 @@ public function addStaff(Request $request)
         // Create work info record
         try {
             if ($staff) {
+                // primary_role column is VARCHAR(255) but model casts array → JSON.
+                // Keep the encoded value within the column so multi-select roles don't 500.
+                $primaryRole = $request->role_designation;
+                if (is_array($primaryRole)) {
+                    while ($primaryRole && strlen(json_encode($primaryRole)) > 250) {
+                        array_pop($primaryRole);
+                    }
+                    if (!$primaryRole) {
+                        $primaryRole = null;
+                    }
+                }
+
                 \Log::info('Creating staff work info record', [
                     'action' => $logAction,
                     'staff_id' => $staff->id,
                     'work_info' => [
-                        'primary_role' => $request->role_designation,
+                        'primary_role' => $primaryRole,
                         'joining_date' => $request->joining_date ?? null,
                         'salary' => $request->salary ?? null,
                         'pay_frequency' => $request->pay_frequency ?? null,
@@ -5295,7 +5368,7 @@ public function addStaff(Request $request)
                 
                 $workInfo = UserWorkInfo::create([
                     'user_id' => $staff->id,
-                    'primary_role' => $request->role_designation,
+                    'primary_role' => $primaryRole,
                     'joining_date' => $request->joining_date ?? null,
                     'salary' => $request->salary ?? null,
                     'pay_frequency' => $request->pay_frequency ?? null,
@@ -5314,7 +5387,7 @@ public function addStaff(Request $request)
                     'timestamp' => now()->toDateTimeString()
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Failed to create staff work info record', [
                 'action' => $logAction,
                 'staff_id' => $staff->id,
@@ -5355,6 +5428,28 @@ public function addStaff(Request $request)
                 'timestamp' => now()->toDateTimeString()
             ]);
             // Don't throw for household info as it's optional
+        }
+
+        if ($request->filled('job_id')) {
+            try {
+                $job = \App\Models\Job::find($request->job_id);
+                if ($job) {
+                    \App\Models\JobApplication::where('job_id', $job->id)
+                        ->where('user_id', $staff->id)
+                        ->update(['application_status' => 'accepted']);
+
+                    $acceptedCount = \App\Models\JobApplication::where('job_id', $job->id)
+                        ->where('application_status', 'accepted')
+                        ->count();
+                    $requiredOpenings = (int) ($job->openings ?: 1);
+                    if ($acceptedCount >= $requiredOpenings) {
+                        $job->update(['status' => 'closed']);
+                        \Log::info("Job ID {$job->id} closed after adding staff {$staff->id}");
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Auto closing job on addStaff failed: ' . $e->getMessage());
+            }
         }
 
         DB::commit();
@@ -5419,6 +5514,42 @@ public function addStaff(Request $request)
              file_put_contents(storage_path('logs/debug_error.log'), date('Y-m-d H:i:s') . " - Error in addStaff: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n\n", FILE_APPEND);
         } catch (\Throwable $writeErr) {}
 
+        // Detect duplicate phone / aadhaar (unique constraint violation ONLY).
+        // Never match on the generic column name "phone_number" — every INSERT SQL
+        // lists that column, which used to mislabel unrelated errors as phone-dupes.
+        $errorMsg = $e->getMessage();
+        $isQueryException = $e instanceof \Illuminate\Database\QueryException;
+        $isDuplicateKey = str_contains($errorMsg, '1062') || str_contains($errorMsg, 'Duplicate entry');
+        $isPhoneDupe = str_contains($errorMsg, 'phone_number_unique')
+            || ($isDuplicateKey && stripos($errorMsg, 'phone') !== false);
+        $isAadharDupe = str_contains($errorMsg, 'aadhar_number_unique')
+            || ($isDuplicateKey && stripos($errorMsg, 'aadhar') !== false);
+
+        if ($isPhoneDupe && !$isAadharDupe) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This phone number is already registered to another person. Please use a different number.',
+                'error_code' => 'PHONE_ALREADY_EXISTS',
+            ], 422);
+        }
+
+        if ($isAadharDupe) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This Aadhaar number is already linked to an existing staff member. Please use Add/Update on that staff instead of creating a new one.',
+                'error_code' => 'AADHAR_ALREADY_EXISTS',
+            ], 422);
+        }
+
+        // Integrity violation that is NOT phone/aadhaar — surface a real message, not a fake phone error.
+        if ($isQueryException && (string) $e->getCode() === '23000') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not save staff: a record with the same unique details already exists.',
+                'error_code' => 'DUPLICATE_RECORD',
+            ], 422);
+        }
+
         return response()->json([
             'success' => false,
             'message' => 'Failed to add staff member',
@@ -5435,7 +5566,9 @@ private function updateExistingStaff(User $existingUser, Request $request)
     $authUser = Auth::guard('api')->user();
     $logAction = 'STAFF_UPDATE_EXISTING';
     
-    // try {
+    // Transaction is owned by addStaff() — do NOT begin/commit here.
+    // Catch here only to log with context, then rethrow so addStaff rolls back once.
+    try {
         \Log::info('Starting update for existing staff', [
             'action' => $logAction,
             'existing_user_id' => $existingUser->id,
@@ -5671,30 +5804,30 @@ private function updateExistingStaff(User $existingUser, Request $request)
                 'timestamp' => now()->toDateTimeString()
             ]);
             // Prepare update data - match database column names exactly
+            // Prepare update data - match database column names exactly
     $updateData = [
-        'first_name' => $request->first_name,
-        'last_name' => $request->last_name,
-        'name' => $request->first_name . ' ' . $request->last_name,
-        'email' => $request->email,
-        'phone_number' => $request->phone_number,
-        'phone_number_country_code' => $request->phone_number_country_code,
-        'phone_number_prefix' => $request->phone_number_country_code,
-        'gender' => $request->gender,
-        'dob' => $request->dob,
-        'image' => $staffPhotoPath,
-        'aadhar_front' => $aadharFrontPath,
-        'aadhar_back' => $aadharBackPath,
-        'verification_certificate' => $policeClearancePath,
+        'first_name' => $request->first_name ?: $existingUser->first_name,
+        'last_name'  => $request->last_name  ?: $existingUser->last_name,
+        'name'       => ($request->first_name ?: $existingUser->first_name) . ' ' . ($request->last_name ?: $existingUser->last_name),
+        // ⚠️ NEVER change phone_number or email of an already-registered user.
+        // Their account credentials must stay intact so they can still log in.
+        // If the form submitted the same phone/email, that's fine too — we just don't touch them.
+        'gender'     => $request->gender ?: $existingUser->gender,
+        'dob'        => $request->dob    ?: $existingUser->dob,
+        'image'      => $staffPhotoPath,
+        'aadhar_front'            => $aadharFrontPath,
+        'aadhar_back'             => $aadharBackPath,
+        'verification_certificate'=> $policeClearancePath,
         'is_staff_added' => 1,
-        'added_by' => $authUser->id,
-        'is_active' => 1,
-        'is_verified' => 1,
-        'step' => 6,
-        'relation' => $request->relation,
-        'upi_id' => $request->upi_id,
-        'job_id' => $request->job_id ?? null,
-        'is_deleted' => 0, // ← RESTORE: Ensure not deleted
-        'status' => 'active', // ← RESTORE: Ensure active status
+        'added_by'       => $authUser->id,
+        'is_active'      => 1,
+        'is_verified'    => 1,
+        'step'           => 6,
+        'relation'       => $request->relation,
+        'upi_id'         => $request->upi_id ?? $existingUser->upi_id,
+        'job_id'         => $request->job_id ?? $existingUser->job_id,
+        'is_deleted'     => 0,
+        'status'         => 'active',
     ];
     
     \Log::info('Update Data Prepared', ['data' => $updateData]);
@@ -5721,7 +5854,7 @@ private function updateExistingStaff(User $existingUser, Request $request)
                 'updated_at' => $existingUser->updated_at,
                 'timestamp' => now()->toDateTimeString()
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Failed to update user record', [
                 'action' => $logAction,
                 'user_id' => $existingUser->id,
@@ -5846,7 +5979,7 @@ private function updateExistingStaff(User $existingUser, Request $request)
                         'timestamp' => now()->toDateTimeString()
                     ]);
                 }
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 \Log::error('Failed to process permanent address', [
                     'action' => $logAction,
                     'user_id' => $existingUser->id,
@@ -5854,7 +5987,7 @@ private function updateExistingStaff(User $existingUser, Request $request)
                     'timestamp' => now()->toDateTimeString()
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Failed to process address record', [
                 'action' => $logAction,
                 'user_id' => $existingUser->id,
@@ -5881,6 +6014,17 @@ private function updateExistingStaff(User $existingUser, Request $request)
 
             $existingWorkInfo = UserWorkInfo::where('user_id', $existingUser->id)->first();
             
+            // Keep primary_role JSON within VARCHAR(255) so multi-role selects don't 500
+            $primaryRoleUpdate = $request->role_designation;
+            if (is_array($primaryRoleUpdate)) {
+                while ($primaryRoleUpdate && strlen(json_encode($primaryRoleUpdate)) > 250) {
+                    array_pop($primaryRoleUpdate);
+                }
+                if (!$primaryRoleUpdate) {
+                    $primaryRoleUpdate = null;
+                }
+            }
+
             if ($existingWorkInfo) {
                 \Log::info('Existing work info found, updating', [
                     'action' => $logAction,
@@ -5890,7 +6034,7 @@ private function updateExistingStaff(User $existingUser, Request $request)
                 ]);
 
                 $existingWorkInfo->update([
-                    'primary_role' => $request->role_designation,
+                    'primary_role' => $primaryRoleUpdate,
                     'joining_date' => $request->joining_date,
                     'salary' => $request->salary,
                     'pay_frequency' => $request->pay_frequency,
@@ -5916,7 +6060,7 @@ private function updateExistingStaff(User $existingUser, Request $request)
 
                 $newWorkInfo = UserWorkInfo::create([
                     'user_id' => $existingUser->id,
-                    'primary_role' => $request->role_designation,
+                    'primary_role' => $primaryRoleUpdate,
                     'joining_date' => $request->joining_date,
                     'salary' => $request->salary,
                     'pay_frequency' => $request->pay_frequency,
@@ -5934,7 +6078,7 @@ private function updateExistingStaff(User $existingUser, Request $request)
                     'timestamp' => now()->toDateTimeString()
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Failed to process work info record', [
                 'action' => $logAction,
                 'user_id' => $existingUser->id,
@@ -5981,6 +6125,28 @@ private function updateExistingStaff(User $existingUser, Request $request)
             // Don't throw for household info as it's optional
         }
 
+        if ($request->filled('job_id')) {
+            try {
+                $job = \App\Models\Job::find($request->job_id);
+                if ($job) {
+                    \App\Models\JobApplication::where('job_id', $job->id)
+                        ->where('user_id', $existingUser->id)
+                        ->update(['application_status' => 'accepted']);
+
+                    $acceptedCount = \App\Models\JobApplication::where('job_id', $job->id)
+                        ->where('application_status', 'accepted')
+                        ->count();
+                    $requiredOpenings = (int) ($job->openings ?: 1);
+                    if ($acceptedCount >= $requiredOpenings) {
+                        $job->update(['status' => 'closed']);
+                        \Log::info("Job ID {$job->id} closed after updating staff {$existingUser->id}");
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Auto closing job on updateExistingStaff failed: ' . $e->getMessage());
+            }
+        }
+
         DB::commit();
 
         \Log::info('Existing staff update completed successfully', [
@@ -6013,25 +6179,22 @@ private function updateExistingStaff(User $existingUser, Request $request)
             'data' => $existingUser->load(['addresses', 'userWorkInfo', 'kycInformation'])
         ], 200);
 
-    // } catch (\Exception $e) {
-    //     DB::rollBack();
-        
-    //     \Log::error('Existing staff update failed - Transaction rolled back', [
-    //         'action' => $logAction,
-    //         'user_id' => $existingUser->id,
-    //         'error_message' => $e->getMessage(),
-    //         'error_trace' => $e->getTraceAsString(),
-    //         'requested_by' => $authUser ? $authUser->id : 'unknown',
-    //         'transaction_rolled_back' => true,
-    //         'timestamp' => now()->toDateTimeString()
-    //     ]);
-
-    //     return response()->json([
-    //         'success' => false,
-    //         'message' => 'Failed to update staff member',
-    //         'error' => env('APP_DEBUG') ? $e->getMessage() : 'Internal server error'
-    //     ], 500);
-    // }
+    } catch (\Throwable $e) {
+        // Log with context, then rethrow — addStaff()'s outer catch owns rollback
+        // and maps duplicate-key errors to accurate API messages.
+        \Log::error('Existing staff update failed', [
+            'action' => $logAction,
+            'user_id' => $existingUser->id,
+            'error_message' => $e->getMessage(),
+            'error_trace' => $e->getTraceAsString(),
+            'requested_by' => $authUser ? $authUser->id : 'unknown',
+            'timestamp' => now()->toDateTimeString()
+        ]);
+        try {
+            file_put_contents(storage_path('logs/debug_error.log'), date('Y-m-d H:i:s') . " - Error in updateExistingStaff: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n\n", FILE_APPEND);
+        } catch (\Throwable $writeErr) {}
+        throw $e;
+    }
 }
     /**
      * Get list of all staff members

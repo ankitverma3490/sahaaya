@@ -1213,13 +1213,75 @@ class StaffController extends Controller
             $endDate   = Carbon::now()->endOfMonth();
         }
 
-        // If staff has a joining_date, don't show attendance before they joined
-        if ($staff->userWorkInfo && $staff->userWorkInfo->joining_date) {
-            $joiningCarbon = Carbon::parse($staff->userWorkInfo->joining_date);
-            if ($startDate->lessThan($joiningCarbon)) {
-                $startDate = $joiningCarbon->startOfDay();
+        // Resolve employer and employment status
+        $employerId = $staff->added_by ?? $staff->parent_user_id ?? null;
+        $hiredJobApp = null;
+        if (!$employerId) {
+            $hiredJobApp = JobApplication::where('user_id', $staff->id)
+                ->whereIn('application_status', ['accepted', 'approved', 'active', 'hired'])
+                ->with('job')
+                ->latest()
+                ->first();
+            if ($hiredJobApp && $hiredJobApp->job) {
+                $employerId = $hiredJobApp->job->created_by;
             }
         }
+
+        $isHired = ($staff->is_staff_added == 1 || !empty($employerId) || !empty($hiredJobApp));
+
+        // If staff is NOT hired and has no active job/employer, only return explicit attendance records if any exist
+        $hasExplicitAttendance = Attendance::where('staff_id', $staff->id)->exists();
+        if (!$isHired && !$hasExplicitAttendance) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Attendance retrieved successfully',
+                'data' => []
+            ], 200);
+        }
+
+        // Determine effective joining/hiring date
+        // IMPORTANT: NEVER use created_at as a fallback — that causes fresh accounts to show fake old attendance.
+        // Only use a real employer-set joining_date or the accepted job application date.
+        $joiningCarbon = null;
+        if ($hiredJobApp) {
+            // Use available_from (the date staff said they can start) if set, otherwise use when app was accepted
+            $rawJoining = $hiredJobApp->available_from ?? $hiredJobApp->joining_date ?? null;
+            if ($rawJoining) {
+                $joiningCarbon = Carbon::parse($rawJoining);
+            } else {
+                $joiningCarbon = Carbon::parse($hiredJobApp->updated_at ?? $hiredJobApp->created_at);
+            }
+        } elseif ($staff->userWorkInfo && $staff->userWorkInfo->joining_date) {
+            $joiningCarbon = Carbon::parse($staff->userWorkInfo->joining_date);
+        }
+        // ⚠️ NO fallback to $staff->created_at — that would show fake past attendance for fresh accounts
+
+        // If we have NO valid joining date at all, return empty — staff has not officially started
+        if (!$joiningCarbon) {
+            return response()->json([
+                'status'  => true,
+                'message' => 'Attendance retrieved successfully',
+                'data'    => []
+            ], 200);
+        }
+
+        // If joining date is in the future, nothing to show yet
+        $today = Carbon::now('Asia/Kolkata')->toDateString();
+        if ($joiningCarbon->toDateString() > $today) {
+            return response()->json([
+                'status'  => true,
+                'message' => 'Attendance retrieved successfully',
+                'data'    => []
+            ], 200);
+        }
+
+        if ($joiningCarbon && $startDate->lessThan($joiningCarbon)) {
+            $startDate = $joiningCarbon->startOfDay();
+        }
+
+        // Check if employer has auto_attendance enabled
+        $employer = $employerId ? User::find($employerId) : null;
+        $autoEnabled = $employer && ($employer->auto_attendence !== 0 && $employer->auto_attendence !== "0" && $employer->auto_attendence !== false);
 
         // Get attendance records for that month
         $attendance = Attendance::whereBetween('date', [$startDate, $endDate])
@@ -1244,7 +1306,7 @@ class StaffController extends Controller
             $rawDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         }
         $workingDays3 = array_map(fn($d) => substr(strtolower(trim($d)), 0, 3), $rawDays);
-        $todayStr = Carbon::now('Asia/Kolkata')->toDateString();
+        // $today is already defined above from the joining date check
 
         $result = [];
 
@@ -1253,20 +1315,33 @@ class StaffController extends Controller
             $day3 = strtolower($date->format('D')); // e.g. 'mon', 'sun'
 
             if (isset($attendance[$formattedDate])) {
-                $status = $attendance[$formattedDate];
+                // NEVER surface future-dated rows (legacy bad data / manual inserts).
+                if ($formattedDate > $today) {
+                    continue;
+                }
+                // Never surface rows from before the official joining date.
+                if ($joiningCarbon && $formattedDate < $joiningCarbon->toDateString()) {
+                    continue;
+                }
+                $result[] = [
+                    'date' => $formattedDate,
+                    'status' => $attendance[$formattedDate]
+                ];
             } else {
-                // By default, for working days up to today, mark as present if no record exists
-                if ($formattedDate <= $todayStr && in_array($day3, $workingDays3)) {
-                    $status = 'present';
-                } else {
-                    $status = 'absent';
+                // NEVER mark future dates as absent! Future dates have not occurred yet.
+                if ($formattedDate > $today) {
+                    continue;
+                }
+
+                // Auto-present only from joining date onward (startDate already clamped),
+                // only on configured working days, and only if employer enabled auto attendance.
+                if ($autoEnabled && in_array($day3, $workingDays3)) {
+                    $result[] = [
+                        'date' => $formattedDate,
+                        'status' => 'present'
+                    ];
                 }
             }
-
-            $result[] = [
-                'date' => $formattedDate,
-                'status' => $status
-            ];
         }
 
         return response()->json([
@@ -2451,13 +2526,35 @@ class StaffController extends Controller
                 ->where('is_active', 1)
                 ->where('is_deleted', 0)
                 ->get()
-                ->map(function($staff) use ($user, $today) {
-                    $attendance = $staff->attendance_details->first();
+                ->map(function($staff) use ($user, $today, $effectiveOwnerId) {
+                    $joiningDate = $staff->userWorkInfo?->joining_date;
+                    if (!$joiningDate) {
+                        $app = JobApplication::where('user_id', $staff->id)
+                            ->whereIn('application_status', ['accepted', 'approved', 'active', 'hired'])
+                            ->whereHas('job', function($q) use ($effectiveOwnerId) {
+                                $q->where('created_by', $effectiveOwnerId);
+                            })
+                            ->latest()
+                            ->first();
+                        $joiningDate = $app?->available_from ?? $app?->joining_date;
+                    }
 
-                    // Lazy auto-attendance fallback: If the employer has auto-attendance enabled (default ON unless explicitly 0),
-                    // and no record exists, dynamically create it to cover for missed crons or late toggles.
+                    $isScheduledFuture = false;
+                    $formattedScheduledDate = null;
+                    if ($joiningDate && $joiningDate > $today) {
+                        $isScheduledFuture = true;
+                        try {
+                            $formattedScheduledDate = \Carbon\Carbon::parse($joiningDate)->format('M jS');
+                        } catch (\Throwable $e) {
+                            $formattedScheduledDate = $joiningDate;
+                        }
+                    }
+
+                    $attendance = $isScheduledFuture ? null : $staff->attendance_details->first();
+
+                    // Lazy auto-attendance fallback: only if staff has already started work
                     $autoEnabled = ($user->auto_attendence !== 0 && $user->auto_attendence !== "0" && $user->auto_attendence !== false);
-                    if (!$attendance && $autoEnabled) {
+                    if (!$isScheduledFuture && !$attendance && $autoEnabled) {
                         $rawDays = $staff->userWorkInfo?->working_days ?? ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
                         if (is_string($rawDays)) {
                             $rawDays = json_decode($rawDays, true) ?? explode(',', $rawDays);
@@ -2492,10 +2589,14 @@ class StaffController extends Controller
                         'last_name' => $staff->last_name,
                         'image' => $staff->image ? ((strpos($staff->image, 'http') !== false) ? $staff->image : url($staff->image)) : null,
                         'staff' => $staff, // Include full staff object for frontend compatibility
-                        'attendance_details' => $attendance ?: [
+                        'is_scheduled' => $isScheduledFuture,
+                        'joining_date' => $joiningDate,
+                        'scheduled_start_date' => $formattedScheduledDate,
+                        'scheduled_label' => $isScheduledFuture ? "Scheduled from {$formattedScheduledDate}" : null,
+                        'attendance_details' => $isScheduledFuture ? null : ($attendance ?: [
                             'status' => 'present', // Default to present if no record for today
                             'date' => $today
-                        ]
+                        ])
                     ];
                 });
 

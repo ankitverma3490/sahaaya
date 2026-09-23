@@ -64,9 +64,10 @@ const PostNewJob = ({ navigation, route }) => {
       .join('|')
       .toLowerCase();
 
-  // Compensation
+  // Compensation & Openings
   const [expectedCompensation, setExpectedCompensation] = useState('');
   const [compensationType, setCompensationType] = useState({ label: 'Mon', value: 'monthly' });
+  const [openings, setOpenings] = useState('1');
 
   // Location
   const [selectedAddress, setSelectedAddress] = useState(null);
@@ -239,8 +240,15 @@ const PostNewJob = ({ navigation, route }) => {
     }
 
     // Working Schedule
+    if (jobData.openings) {
+      setOpenings(String(jobData.openings));
+    }
     if (jobData.stay_type) {
-      setStayType([jobData.stay_type]);
+      if (jobData.stay_type === 'both' || jobData.stay_type.includes(',')) {
+        setStayType(['inhouse', 'come_and_go']);
+      } else {
+        setStayType([jobData.stay_type]);
+      }
     }
     const commitRaw = jobData.commitment_type || '';
     setCommitment(commitRaw ? [commitRaw] : []);
@@ -566,7 +574,9 @@ const PostNewJob = ({ navigation, route }) => {
       const commitmentValue = commitmentMap[commitment[0]] || commitment[0].toLowerCase().replace(/\s+/g, '-');
       formData.append('commitment_type', commitmentValue);
     }
-    if (stayType.length > 0) {
+    if (stayType.length > 1) {
+      formData.append('stay_type', 'both');
+    } else if (stayType.length === 1) {
       formData.append('stay_type', stayType[0]);
     }
     const preferredHours = `${formatTime(startTime)} - ${formatTime(endTime)}`;
@@ -576,6 +586,7 @@ const PostNewJob = ({ navigation, route }) => {
     }
 
     // Status
+    formData.append('openings', parseInt(openings, 10) || 1);
     formData.append('status', 'open');
 
     // Skills & Requirements
@@ -914,7 +925,9 @@ const PostNewJob = ({ navigation, route }) => {
       const commitmentValue = commitmentMap[commitment[0]] || commitment[0].toLowerCase().replace(/\s+/g, '-');
       formData.append('commitment_type', commitmentValue);
     }
-    if (stayType.length > 0) {
+    if (stayType.length > 1) {
+      formData.append('stay_type', 'both');
+    } else if (stayType.length === 1) {
       formData.append('stay_type', stayType[0]);
     }
     const preferredHours = `${formatTime(startTime)} - ${formatTime(endTime)}`;
@@ -924,6 +937,7 @@ const PostNewJob = ({ navigation, route }) => {
     }
 
     // Status
+    formData.append('openings', parseInt(openings, 10) || 1);
     formData.append('status', 'open');
 
     // Skills & Requirements
@@ -1090,6 +1104,21 @@ const PostNewJob = ({ navigation, route }) => {
               />
             </View>
           </View>
+          <Typography
+            style={{ fontSize: 14, fontFamily: Font.Poppins_Medium, color: '#565D6D', marginBottom: 6, marginTop: 14 }}
+          >
+            Number of Staff Needed
+          </Typography>
+          <Input
+            title=""
+            showTitle={false}
+            mainStyle={{ marginVertical: 0 }}
+            placeholder="e.g. 1"
+            value={openings}
+            onChange={val => setOpenings(val ? val.replace(/[^0-9]/g, '') : '')}
+            keyboardType="numeric"
+            style_inputContainer={{ height: 52, borderRadius: 12, backgroundColor: '#FAFAFA' }}
+          />
         </View>
 
         <View style={styles.card}>
@@ -1246,7 +1275,13 @@ const PostNewJob = ({ navigation, route }) => {
               <TouchableOpacity
                 key={index}
                 style={styles.checkboxRow}
-                onPress={() => setStayType([val])}
+                onPress={() => {
+                  setStayType(prev =>
+                    prev.includes(val)
+                      ? prev.filter(item => item !== val)
+                      : [...prev, val]
+                  );
+                }}
               >
                 <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
                   {isSelected && (

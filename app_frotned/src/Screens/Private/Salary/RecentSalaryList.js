@@ -25,7 +25,7 @@ import PaymentReceipt from '../../../Component/PaymentReceipt';
 import { getAsyncStorage } from '../../../Utils/AsyncStorage';
 
 const PAGE_SIZE = 10;
-const STATUS_FILTERS = ['all', 'Paid', 'Pending', 'Advance'];
+const STATUS_FILTERS = ['all', 'Paid', 'Advance'];
 
 const RecentSalaryList = ({ navigation }) => {
   const isFocused = useIsFocused();
@@ -357,30 +357,32 @@ const RecentSalaryList = ({ navigation }) => {
         </View>
       </View>
 
-      <View style={{ alignItems: 'flex-end' }}>
-        <Typography
-          type={Font.Poppins_SemiBold}
-          style={[styles.paymentStatus, { color: getStatusColor(item?.status) }]}
-        >
-          {item?.status ?? '--'}
-        </Typography>
-        <TouchableOpacity
-          style={styles.downloadButton}
-          onPress={() => setReceiptPayment(item)}
-        >
-          <Image
-            source={ImageConstant.fileText}
-            style={styles.downloadIcon}
-            resizeMode="contain"
-          />
+        <View style={{ alignItems: 'flex-end' }}>
           <Typography
-            type={Font.Poppins_Regular}
-            style={styles.downloadText}
+            type={Font.Poppins_SemiBold}
+            style={[styles.paymentStatus, { color: getStatusColor(item?.status) }]}
           >
-            Receipt
+            {item?.status ?? '--'}
           </Typography>
-        </TouchableOpacity>
-      </View>
+          {(String(item?.status || '').toLowerCase() === 'paid' || String(item?.status || '').toLowerCase() === 'active') && (
+            <TouchableOpacity
+              style={styles.downloadButton}
+              onPress={() => setReceiptPayment(item)}
+            >
+              <Image
+                source={ImageConstant.fileText}
+                style={styles.downloadIcon}
+                resizeMode="contain"
+              />
+              <Typography
+                type={Font.Poppins_Regular}
+                style={styles.downloadText}
+              >
+                Receipt
+              </Typography>
+            </TouchableOpacity>
+          )}
+        </View>
     </TouchableOpacity>
   );
 
@@ -483,23 +485,25 @@ const RecentSalaryList = ({ navigation }) => {
                 </View>
               )}
 
-              <TouchableOpacity
-                style={styles.receiptButton}
-                onPress={() => {
-                  const paymentForReceipt = selectedPayment;
-                  setSelectedPayment(null);
-                  setPayoutHistory(null);
-                  setTimeout(() => setReceiptPayment(paymentForReceipt), 300);
-                }}
-                activeOpacity={0.8}
-              >
-                <Typography
-                  type={Font.Poppins_SemiBold}
-                  style={styles.modalButtonText}
+              {(String(selectedPayment?.status || '').toLowerCase() === 'paid' || String(selectedPayment?.status || '').toLowerCase() === 'active') && (
+                <TouchableOpacity
+                  style={styles.receiptButton}
+                  onPress={() => {
+                    const paymentForReceipt = selectedPayment;
+                    setSelectedPayment(null);
+                    setPayoutHistory(null);
+                    setTimeout(() => setReceiptPayment(paymentForReceipt), 300);
+                  }}
+                  activeOpacity={0.8}
                 >
-                  Download / Share Receipt
-                </Typography>
-              </TouchableOpacity>
+                  <Typography
+                    type={Font.Poppins_SemiBold}
+                    style={styles.modalButtonText}
+                  >
+                    Download / Share Receipt
+                  </Typography>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 style={styles.modalButton}

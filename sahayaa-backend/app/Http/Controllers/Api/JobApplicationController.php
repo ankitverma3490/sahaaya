@@ -161,17 +161,32 @@ class JobApplicationController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = Auth::guard('api')->user();
-        
-       // if ($user->isAdmin()) {
+
+        if (!$user) {
+            return response()->json([
+                'status' => 'error',
+                'data' => [],
+                'message' => 'Unauthenticated'
+            ], 401);
+        }
+
+        // Admin panel users see everything; everyone else only sees
+        // (a) their own applications, or (b) applications to jobs they posted.
+        if ($user->is_admin_panel_user) {
             $applications = JobApplication::with(['job', 'user'])
                          ->orderBy('created_at', 'desc')
                          ->get();
-        // } else {
-        //     $applications = $user->jobApplications()
-        //                  ->with(['job'])
-        //                  ->orderBy('created_at', 'desc')
-        //                  ->get();
-        // }
+        } else {
+            $applications = JobApplication::with(['job', 'user'])
+                         ->where(function ($q) use ($user) {
+                             $q->where('user_id', $user->id)
+                               ->orWhereHas('job', function ($jq) use ($user) {
+                                   $jq->where('created_by', $user->id);
+                               });
+                         })
+                         ->orderBy('created_at', 'desc')
+                         ->get();
+        }
 
         return response()->json([
             'status' => 'success',
@@ -293,14 +308,14 @@ class JobApplicationController extends Controller
             }
 
             // Also check if staff is already added by another employer
-            if ($user->is_staff_added && $user->added_by && $user->added_by !== $job->created_by) {
-                // Refund credits
-                \DB::table('users')->where('id', $user->id)->increment('wallet_balance', $creditsPerApplication);
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'You are already employed by another house owner. Please leave your current job first before applying for a new one.'
-                ], 400);
-            }
+            // if ($user->is_staff_added && $user->added_by && $user->added_by !== $job->created_by) {
+            //     // Refund credits
+            //     \DB::table('users')->where('id', $user->id)->increment('wallet_balance', $creditsPerApplication);
+            //     return response()->json([
+            //         'status' => 'error',
+            //         'message' => 'You are already employed by another house owner. Please leave your current job first before applying for a new one.'
+            //     ], 400);
+            // }
 
             // Create application
             $application = JobApplication::create([
@@ -399,9 +414,17 @@ class JobApplicationController extends Controller
         $staff = User::find($application->user_id);
         
         if ($request->application_status == "accepted") {
-            // Do NOT automatically add as staff here. The owner must go through
-            // the NewStaffFrom screen and verify via Aadhar OTP to add them.
-            
+            if ($job) {
+                $acceptedCount = JobApplication::where('job_id', $job->id)
+                    ->where('application_status', 'accepted')
+                    ->count();
+                $requiredOpenings = (int) ($job->openings ?: 1);
+                if ($acceptedCount >= $requiredOpenings) {
+                    $job->update(['status' => 'closed']);
+                    \Log::info("Job ID {$job->id} automatically closed after reaching {$requiredOpenings} accepted staff.");
+                }
+            }
+
             // Send notification to staff (in-app + FCM push + SMS + WhatsApp)
             if ($staff) {
                 \App\Services\NotificationService::jobAccepted(
@@ -462,6 +485,29 @@ class JobApplicationController extends Controller
     {
         try {
             \Log::info('getJobApplications called for Job ID: ' . $jobId);
+
+            $authUser = Auth::guard('api')->user();
+            $job = Job::find($jobId);
+            if (!$job) {
+                return response()->json([
+                    'status' => 'error',
+                    'data' => [],
+                    'message' => 'Job not found'
+                ], 404);
+            }
+
+            // Only the job owner or an admin panel user may list applicants.
+            if (
+                $authUser
+                && !$authUser->is_admin_panel_user
+                && (int) $job->created_by !== (int) $authUser->id
+            ) {
+                return response()->json([
+                    'status' => 'error',
+                    'data' => [],
+                    'message' => 'You are not allowed to view applications for this job.'
+                ], 403);
+            }
 
             $applications = JobApplication::with([
                                 'user',
@@ -850,7 +896,7 @@ class JobApplicationController extends Controller
                 "job_id" => "nullable|exists:jobs,id",
                 "leave_type_id" => "required|exists:leave_types,id",
                 "start_date" => "required|date",
-                "end_date" => "required|date",
+                "end_date" => "required|date|after_or_equal:start_date",
                 "reason" => "required|string",
                 "supporting_document" => "nullable|file|mimes:jpg,jpeg,png,pdf|max:2048"
             ]);
@@ -870,6 +916,41 @@ class JobApplicationController extends Controller
                     "status" => false,
                     "message" => "Unauthorized. Please login again."
                 ], 401);
+            }
+
+            // houseowner_id must be the caller's employer (or the caller themselves
+            // if they are the house owner) — never trust arbitrary owner IDs.
+            if (
+                (int) $request->houseowner_id !== (int) $user->id
+                && !$user->is_admin_panel_user
+            ) {
+                $isStaffOfOwner = (int) ($user->added_by ?? 0) === (int) $request->houseowner_id
+                    || (int) ($user->parent_user_id ?? 0) === (int) $request->houseowner_id;
+                if (!$isStaffOfOwner) {
+                    return response()->json([
+                        "status" => false,
+                        "message" => "You are not allowed to apply leave for this house owner."
+                    ], 403);
+                }
+            }
+
+            // Block overlapping leave requests for the same staff
+            $overlap = LeaveRequest::where('user_id', $user->id)
+                ->whereIn('status', ['pending', 'approved'])
+                ->where(function ($q) use ($request) {
+                    $q->whereBetween('start_date', [$request->start_date, $request->end_date])
+                      ->orWhereBetween('end_date', [$request->start_date, $request->end_date])
+                      ->orWhere(function ($q2) use ($request) {
+                          $q2->where('start_date', '<=', $request->start_date)
+                             ->where('end_date', '>=', $request->end_date);
+                      });
+                })
+                ->exists();
+            if ($overlap) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "You already have a pending/approved leave that overlaps these dates."
+                ], 400);
             }
 
             $filePath = null;

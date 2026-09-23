@@ -35,6 +35,7 @@ class Job extends Model
         'pet_care_required',
         'additional_requirements',
         'required_skills',
+        'openings',
         'created_by'
     ];
 

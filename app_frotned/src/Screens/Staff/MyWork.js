@@ -233,18 +233,24 @@ const MyWork = () => {
         let absentCount = 0;
         let leaveCount = 0;
 
-        const today = new Date();
-        const yearNum = parseInt(year, 10);
-        const monNum = parseInt(mon, 10);
-        const daysInMonth = new Date(yearNum, monNum, 0).getDate();
+        // Only pre-fill weekend markers if staff is actually hired/employed
+        // For fresh unattached accounts, skip the weekend loop entirely
+        const isEmployed = userDetail?.is_staff_added === 1 || userDetail?.is_staff_added === '1';
 
-        for (let day = 1; day <= daysInMonth; day++) {
-          const date = new Date(yearNum, monNum - 1, day);
-          if (date > today) break;
-          const dayOfWeek = date.getDay();
-          const dateStr = `${year}-${String(monNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          if (dayOfWeek === 0 || dayOfWeek === 6) {
-            dates[dateStr] = { selected: true, marked: true, selectedColor: STATUS_COLORS.weekend };
+        if (isEmployed) {
+          const today = new Date();
+          const yearNum = parseInt(year, 10);
+          const monNum = parseInt(mon, 10);
+          const daysInMonth = new Date(yearNum, monNum, 0).getDate();
+
+          for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(yearNum, monNum - 1, day);
+            if (date > today) break;
+            const dayOfWeek = date.getDay();
+            const dateStr = `${year}-${String(monNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+              dates[dateStr] = { selected: true, marked: true, selectedColor: STATUS_COLORS.weekend };
+            }
           }
         }
 
@@ -267,7 +273,7 @@ const MyWork = () => {
       () => { setCalendarLoading(false); },
       () => { setCalendarLoading(false); },
     );
-  }, [userDetail?.id]);
+  }, [userDetail?.id, userDetail?.is_staff_added]);
 
   const handleMonthChange = useCallback((month) => {
     const newMonth = `${month.year}-${String(month.month).padStart(2, '0')}`;
@@ -564,7 +570,9 @@ const MyWork = () => {
           </View>
           )}
 
-          {/* Attendance Calendar */}
+          {/* Attendance Calendar — only show if staff has an active job */}
+          {hasActiveJob && (
+
           <View style={styles.card}>
             <View
               style={[
@@ -660,6 +668,7 @@ const MyWork = () => {
               </View>
             </View>
           </View>
+          )} {/* end hasActiveJob attendance card */}
 
           {/* Leave Requests */}
           {workData?.leave_requests?.length > 0 && (

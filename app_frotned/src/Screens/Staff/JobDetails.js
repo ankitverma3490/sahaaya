@@ -469,7 +469,7 @@ const JobDetails = ({ navigation, route }) => {
                   style={[styles.infoValue, { textTransform: 'capitalize' }]}
                   numberOfLines={2}
                 >
-                  {jobData.stay_type === 'come_and_go' ? 'Come and Go' : 'Inhouse'}
+                  {jobData.stay_type === 'both' ? 'Inhouse & Come and Go' : (jobData.stay_type === 'come_and_go' ? 'Come and Go' : 'Inhouse')}
                 </Typography>
                 <Typography type={Font.Poppins_Regular} style={styles.infoLabel}>
                   Stay Type

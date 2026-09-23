@@ -177,8 +177,8 @@ const StaffManagement = ({ navigation, route }) => {
     const currentMonth = moment().format('YYYY-MM');
     const selectedStaffId = leaveType?.value;
     const existing = listPastPayments?.find(payment => {
-      const paymentMonth = moment(payment?.created_at).format('YYYY-MM');
-      const isSameMonth = paymentMonth === currentMonth;
+      const paymentMonth = moment(payment?.created_at || payment?.date).format('YYYY-MM');
+      const isSameMonth = paymentMonth === currentMonth || payment?.salary_period === moment().format('MMMM YYYY');
       const isPaid = String(payment?.status || '').toLowerCase() === 'paid';
       const isSameStaff = payment?.staff_id === selectedStaffId || payment?.staff_member?.id === selectedStaffId;
       return isSameMonth && isPaid && isSameStaff;
@@ -187,22 +187,25 @@ const StaffManagement = ({ navigation, route }) => {
 
     // Calculate total paid this month for this staff
     const staffPayments = listPastPayments?.filter(payment => {
-      const paymentMonth = moment(payment?.created_at).format('YYYY-MM');
-      const isSameMonth = paymentMonth === currentMonth;
+      const paymentMonth = moment(payment?.created_at || payment?.date).format('YYYY-MM');
+      const isSameMonth = paymentMonth === currentMonth || payment?.salary_period === moment().format('MMMM YYYY');
       const isPaid = String(payment?.status || '').toLowerCase() === 'paid';
       const isSameStaff = payment?.staff_id === selectedStaffId || payment?.staff_member?.id === selectedStaffId;
       return isSameMonth && isPaid && isSameStaff;
     });
     const paidSum = staffPayments?.reduce((sum, p) => sum + (Number(p.net_salary || p.amount) || 0), 0) || 0;
     setTotalPaidThisMonth(paidSum);
-    
-    const trueRemaining = Math.max(0, netSalary - paidSum);
+
+    // Cap remaining against the AGREEED monthly salary (same rule as backend),
+    // falling back to this period's net when profile salary is unknown.
+    const periodCap = profileMonthlySalary > 0 ? profileMonthlySalary : netSalary;
+    const trueRemaining = Math.max(0, periodCap - paidSum);
     setRemainingBalance(trueRemaining);
-    
+
     // Auto-calculate custom amount to the remaining balance
     setCustomAmount(String(trueRemaining > 0 ? trueRemaining.toFixed(2) : netSalary.toFixed(2)));
-    
-  }, [overtime, baseSalary, bonus, pfDeduction, deduction, leaveType, listPastPayments]);
+
+  }, [overtime, baseSalary, bonus, pfDeduction, deduction, leaveType, listPastPayments, profileMonthlySalary]);
 
   // Reset custom amount when staff changes
   useEffect(() => {
@@ -377,7 +380,9 @@ const StaffManagement = ({ navigation, route }) => {
       pf_deduction: Number(pfDeduction) || 0,
       advance_payment: 0,
       payment_mode: selectedMethod?.toLowerCase() || 'cash',
-      status: 'paid',
+      // Save = persist salary breakdown ONLY. Never create a Payment / "Salary Paid" push.
+      save_only: true,
+      status: 'draft',
     };
 
     POST_WITH_TOKEN(
@@ -468,11 +473,20 @@ const StaffManagement = ({ navigation, route }) => {
         // UPI ID exists, directly open UPI app
         const upiId = leaveType.upi_id.trim();
         const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(leaveType?.label || 'Staff')}&am=${Number(advanceAmount).toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Advance payment - ${moment().format('DD MMM YYYY')}`)}`;
-        Linking.openURL(upiUrl)
-          .then(() => {
-            // After opening UPI app, proceed with API call
-            submitAdvancePayment();
-          })
+          Linking.openURL(upiUrl)
+            .then(() => {
+              // After opening UPI app, ask for confirmation
+              setTimeout(() => {
+                Alert.alert(
+                  'Advance Payment Confirmation',
+                  'Please confirm if you have completed the advance payment in your UPI app.',
+                  [
+                    { text: 'Cancel', onPress: () => setAdvanceLoading(false), style: 'cancel' },
+                    { text: 'Yes, Paid', onPress: () => submitAdvancePayment('paid') }
+                  ]
+                );
+              }, 1500);
+            })
           .catch(() => {
             setAdvanceLoading(false);
             SimpleToast.show(
@@ -658,6 +672,7 @@ const StaffManagement = ({ navigation, route }) => {
         [
           { text: 'Cancel', onPress: () => setIsSubmitting(false), style: 'cancel' },
           { text: 'Process Anyway', onPress: () => {
+            setIsSubmitting(true);
             if (selectedMethod === 'UPI') {
               processUpiPayment();
             } else {
@@ -674,6 +689,7 @@ const StaffManagement = ({ navigation, route }) => {
         [
           { text: 'Cancel', onPress: () => setIsSubmitting(false), style: 'cancel' },
           { text: 'Process Anyway', onPress: () => {
+            setIsSubmitting(true);
             if (selectedMethod === 'UPI') {
               processUpiPayment();
             } else {
@@ -718,10 +734,17 @@ const StaffManagement = ({ navigation, route }) => {
       const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(leaveType?.label || 'Staff')}&am=${amountToPay.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Salary payment for ${moment().format('MMMM YYYY')}`)}`;
       Linking.openURL(upiUrl)
         .then(() => {
-          // Give the app a moment to settle after opening external app before hitting the API
+          // Delay to ensure the OS handles the app switch before showing the confirmation
           setTimeout(() => {
-            submitSalaryPayment(null);
-          }, 1000);
+            Alert.alert(
+              'Salary Payment Confirmation',
+              'Please confirm if you have completed the salary payment in your UPI app.',
+              [
+                { text: 'Cancel', onPress: () => setIsSubmitting(false), style: 'cancel' },
+                { text: 'Yes, Paid', onPress: () => submitSalaryPayment('paid') }
+              ]
+            );
+          }, 1500);
         })
         .catch(() => {
           setIsSubmitting(false);
@@ -869,6 +892,9 @@ const StaffManagement = ({ navigation, route }) => {
   };
 
   const submitSalaryPayment = (paymentResult) => {
+    // Always lock the button while a payment request is in flight —
+    // this is what previously allowed 5–6 duplicate POSTs.
+    setIsSubmitting(true);
     const paymentMode = selectedMethod?.toLowerCase() || 'cash';
     const isPaid = paymentResult || paymentMode === 'cash' || paymentMode === 'bank transfer';
     const body = {
@@ -883,6 +909,7 @@ const StaffManagement = ({ navigation, route }) => {
       payment_mode: paymentMode,
       amount: getPayableAmount(),
       status: isPaid ? 'paid' : 'pending',
+      save_only: false,
     };
     POST_WITH_TOKEN(
       `${SalaryManagementStaff}/${leaveType?.value}`,

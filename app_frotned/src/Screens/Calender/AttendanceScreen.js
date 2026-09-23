@@ -217,6 +217,12 @@ const AttendanceScreen = ({ navigation, route }) => {
       SimpleToast.show("Please select a staff member first", SimpleToast.SHORT);
       return;
     }
+    // Future dates must never be markable (local/IST calendar day, not UTC).
+    const todayStr = moment().format("YYYY-MM-DD");
+    if (day.dateString > todayStr) {
+      SimpleToast.show("Cannot mark attendance for a future date", SimpleToast.SHORT);
+      return;
+    }
     setSelected(day.dateString);
     setEditingDate(day.dateString);
     setStatusModalVisible(true);
@@ -224,6 +230,15 @@ const AttendanceScreen = ({ navigation, route }) => {
 
   const saveAttendanceEdit = (status) => {
     if (!editingDate || !selectedStaff) return;
+
+    // Hard block future dates client-side too (maxDate prop alone is not enough).
+    const todayStr = moment().format("YYYY-MM-DD");
+    if (editingDate > todayStr) {
+      setLoading(false);
+      setStatusModalVisible(false);
+      SimpleToast.show("Cannot mark attendance for a future date", SimpleToast.SHORT);
+      return;
+    }
 
     setLoading(true);
     const formData = new FormData();
@@ -297,7 +312,7 @@ const AttendanceScreen = ({ navigation, route }) => {
         <Calendar
           monthFormat={"MMMM yyyy"}
           hideExtraDays={true}
-          maxDate={new Date().toISOString().split("T")[0]}
+          maxDate={moment().format("YYYY-MM-DD")}
           onDayPress={handleDatePress}
           onMonthChange={handleMonthChange}
           markedDates={{
@@ -325,7 +340,7 @@ const AttendanceScreen = ({ navigation, route }) => {
             color="#999" 
             style={{ textAlign: 'center', marginTop: 10, fontFamily: Font.Poppins_Regular }}
           >
-            Tip: Click on any date to mark attendance.
+            Tip: Click on a past or today's date to mark attendance.
           </Typography>
         )}
 

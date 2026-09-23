@@ -390,7 +390,7 @@ const JobsList = ({ navigation }) => {
         {job.stay_type ? (
           <View style={styles.stayTypeBadge}>
             <Typography type={Font.Poppins_Medium} size={11} color="#D98579">
-              {job.stay_type === 'come_and_go' ? 'Come & Go' : 'Live-in'}
+              {job.stay_type === 'both' ? 'Live-in / Come & Go' : (job.stay_type === 'come_and_go' ? 'Come & Go' : 'Live-in')}
             </Typography>
           </View>
         ) : null}

@@ -328,69 +328,77 @@ export default function ListingJob({ navigation, route }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Show action buttons for pending or accepted (always allow reject) */}
-              {(item?.application_status == 'pending' || 
-                item?.application_status == 'accepted') && (
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      {
-                        backgroundColor: 'white',
-                        borderWidth: 1,
-                        borderColor: '#D98579',
-                      },
-                    ]}
-                    onPress={() => {
-                      if (item?.application_status == 'accepted') {
-                        Alert.alert(
-                          'Reject Staff',
-                          'This staff member is currently active. Rejecting will remove them from your staff and stop their salary. Are you sure?',
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Reject', style: 'destructive', onPress: () => handelapplication('rejected', item?.id, item) },
-                          ],
-                        );
-                      } else {
-                        handelapplication('rejected', item?.id, item);
-                      }
-                    }}
-                  >
-                    <Image
-                      source={ImageConstant.X}
-                      style={styles.icon}
-                      resizeMode="contain"
-                    />
-                    <Typography
-                      type={Font.Poppins_Regular}
-                      style={{ color: '#D98579', fontSize: 13, marginLeft: 4 }}
-                    >
-                      {LocalizedStrings.LeaveApplications.Reject}
-                    </Typography>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      { backgroundColor: '#D98579' },
-                    ]}
-                    onPress={() => handelapplication('accepted', item?.id, item)}
-                  >
-                    <Image
-                      source={ImageConstant.correct}
-                      style={styles.icon}
-                      resizeMode="contain"
-                    />
-                    <Typography
-                      type={Font.Poppins_Regular}
-                      style={{ color: '#FFFFFF', fontSize: 13, marginLeft: 4 }}
-                    >
-                      {item?.application_status == 'accepted' && item?.user?.is_staff_added == 0
-                        ? 'Add Staff Again'
-                        : LocalizedStrings.LeaveApplications.Approve}
-                    </Typography>
-                  </TouchableOpacity>
+              {/* Show action buttons for pending or accepted */}
+              {item?.application_status == 'accepted' && item?.user?.is_staff_added != 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F5E9', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, marginTop: 12 }}>
+                  <Image source={ImageConstant?.correct} style={{ width: 14, height: 14, tintColor: '#2E7D32', marginRight: 6 }} />
+                  <Typography type={Font.Poppins_SemiBold} color="#2E7D32" size={13}>
+                    Confirmed & Added as Staff
+                  </Typography>
                 </View>
+              ) : (
+                (item?.application_status == 'pending' || item?.application_status == 'accepted') && (
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionButton,
+                        {
+                          backgroundColor: 'white',
+                          borderWidth: 1,
+                          borderColor: '#D98579',
+                        },
+                      ]}
+                      onPress={() => {
+                        if (item?.application_status == 'accepted') {
+                          Alert.alert(
+                            'Reject Staff',
+                            'This staff member is currently active. Rejecting will remove them from your staff and stop their salary. Are you sure?',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Reject', style: 'destructive', onPress: () => handelapplication('rejected', item?.id, item) },
+                            ],
+                          );
+                        } else {
+                          handelapplication('rejected', item?.id, item);
+                        }
+                      }}
+                    >
+                      <Image
+                        source={ImageConstant.X}
+                        style={styles.icon}
+                        resizeMode="contain"
+                      />
+                      <Typography
+                        type={Font.Poppins_Regular}
+                        style={{ color: '#D98579', fontSize: 13, marginLeft: 4 }}
+                      >
+                        {LocalizedStrings.LeaveApplications.Reject}
+                      </Typography>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.actionButton,
+                        { backgroundColor: '#D98579' },
+                      ]}
+                      onPress={() => handelapplication('accepted', item?.id, item)}
+                    >
+                      <Image
+                        source={ImageConstant.correct}
+                        style={styles.icon}
+                        resizeMode="contain"
+                      />
+                      <Typography
+                        type={Font.Poppins_Regular}
+                        style={{ color: '#FFFFFF', fontSize: 13, marginLeft: 4 }}
+                      >
+                        {item?.application_status == 'accepted' && item?.user?.is_staff_added == 0
+                          ? 'Add Staff Again'
+                          : LocalizedStrings.LeaveApplications.Approve}
+                      </Typography>
+                    </TouchableOpacity>
+                  </View>
+                )
               )}
 
               <TouchableOpacity

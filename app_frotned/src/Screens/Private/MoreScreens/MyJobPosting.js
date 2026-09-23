@@ -7,7 +7,7 @@ import {
   Alert,
 } from 'react-native';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import CommanView from '../../../Component/CommanView';
 import HeaderForUser from '../../../Component/HeaderForUser';
 import { ImageConstant } from '../../../Constants/ImageConstant';
@@ -31,11 +31,18 @@ import { useSelector } from 'react-redux';
 
 const MyJobPosting = ({ navigation, route }) => {
   const [jobData, setJobData] = useState([]);
+  const [activeTab, setActiveTab] = useState('All');
   const isFocused = useIsFocused();
   const data = useSelector(state => state?.userDetails);
   const [isPremium, setIsPremium] = useState(false);
   const [deletingJobId, setDeletingJobId] = useState(null);
   const showBackButton = route?.params?.showBackButton ?? navigation.canGoBack();
+
+  const filteredJobs = useMemo(() => {
+    if (activeTab === 'Active') return jobData.filter(j => j?.status === 'open');
+    if (activeTab === 'Closed') return jobData.filter(j => j?.status === 'closed');
+    return jobData;
+  }, [jobData, activeTab]);
   
   const checkSubscription = useCallback(() => {
     GET_WITH_TOKEN(
@@ -226,7 +233,13 @@ const MyJobPosting = ({ navigation, route }) => {
             color="#8C8D8B"
             type={Font?.Poppins_Medium}
           >
-            Status: <Typography color="#FF5724">{item.status}</Typography>
+            Status:{' '}
+            <Typography
+              color={item.status === 'open' ? '#22C55E' : item.status === 'closed' ? '#8C8D8B' : '#FF5724'}
+              type={Font?.Poppins_SemiBold}
+            >
+              {item.status}
+            </Typography>
           </Typography>
         </TouchableOpacity>
 
@@ -302,19 +315,61 @@ const MyJobPosting = ({ navigation, route }) => {
         icon={ImageConstant?.ic_plus}
       />
 
-      {jobData.length === 0 ? (
+      {/* Status Filter Tabs */}
+      {jobData.length > 0 && (
+        <View style={styles.tabsContainer}>
+          {['All', 'Active', 'Closed'].map(tab => {
+            const isSelected = activeTab === tab;
+            const count =
+              tab === 'All'
+                ? jobData.length
+                : tab === 'Active'
+                ? jobData.filter(j => j?.status === 'open').length
+                : jobData.filter(j => j?.status === 'closed').length;
+            return (
+              <TouchableOpacity
+                key={tab}
+                onPress={() => setActiveTab(tab)}
+                style={[
+                  styles.tabButton,
+                  isSelected && styles.activeTabButton,
+                ]}
+              >
+                <Typography
+                  type={isSelected ? Font?.Poppins_SemiBold : Font?.Poppins_Medium}
+                  color={isSelected ? '#111827' : '#6B7280'}
+                  style={{ fontSize: 13 }}
+                >
+                  {tab} ({count})
+                </Typography>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      {filteredJobs.length === 0 ? (
         <EmptyView
-          title={LocalizedStrings.MyJobPostings?.no_jobs || 'No Job Postings'}
+          title={
+            activeTab === 'Active'
+              ? 'No Active Jobs'
+              : activeTab === 'Closed'
+              ? 'No Closed Jobs'
+              : LocalizedStrings.MyJobPostings?.no_jobs || 'No Job Postings'
+          }
           description={
-            LocalizedStrings.MyJobPostings?.no_jobs_desc ||
-            "You haven't posted any jobs yet. Create your first job posting to get started."
+            activeTab === 'Active'
+              ? 'All positions have been filled or closed.'
+              : activeTab === 'Closed'
+              ? 'You do not have any closed jobs.'
+              : LocalizedStrings.MyJobPostings?.no_jobs_desc || "You haven't posted any jobs yet. Create your first job posting to get started."
           }
           icon={ImageConstant?.joblisting}
           iconColor="#D98579"
         />
       ) : (
         <FlatList
-          data={jobData}
+          data={filteredJobs}
           renderItem={renderJob}
           keyExtractor={item => String(item?.id || Math.random())}
           contentContainerStyle={styles.list}
@@ -327,6 +382,29 @@ const MyJobPosting = ({ navigation, route }) => {
 export default MyJobPosting;
 
 const styles = StyleSheet.create({
+  tabsContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginVertical: 10,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    padding: 4,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTabButton: {
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
   postBtn: {
     marginVertical: 10,
     alignSelf: 'center',

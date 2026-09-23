@@ -112,7 +112,13 @@ const NewStaffForm = ({ navigation, route }) => {
   const [roles, setRoles] = useState([]);
   const [rolesLoading, setRolesLoading] = useState(false);
   const [joiningDate, setJoiningDate] = useState('');
-  const [salary, setSalary] = useState('');
+  const [salary, setSalary] = useState(
+    data?.user_work_info?.salary
+      ? String(data?.user_work_info?.salary)
+      : route?.params?.job_compensation
+        ? String(route?.params?.job_compensation)
+        : ''
+  );
   const [upiId, setUpiId] = useState('');
   const [payFrequency, setPayFrequency] = useState(null);
   const [workingDays, setWorkingDays] = useState([]); // array of values
@@ -864,6 +870,27 @@ const NewStaffForm = ({ navigation, route }) => {
       }
     }
 
+    // Validate Present Address — backend requires these (street/city/state/pincode)
+    if (!street || !street.trim()) {
+      newErrors.street = 'Street / address line is required.';
+      hasError = true;
+    }
+    if (!city || !city.trim()) {
+      newErrors.city = 'City is required.';
+      hasError = true;
+    }
+    if (!stateName || !stateName.trim()) {
+      newErrors.stateName = 'State is required.';
+      hasError = true;
+    }
+    if (!pincode || !String(pincode).trim()) {
+      newErrors.pincode = 'Pincode is required.';
+      hasError = true;
+    } else if (!/^\d{4,6}$/.test(String(pincode).trim())) {
+      newErrors.pincode = 'Pincode must be 4 to 6 digits.';
+      hasError = true;
+    }
+
     // Validate Joining Date only if provided
     if (joiningDate) {
       const joinDateParsed = moment(
@@ -946,6 +973,31 @@ const NewStaffForm = ({ navigation, route }) => {
         newErrors.dateOfBirth = 'Invalid date format for Date of Birth.';
         hasError = true;
       }
+    }
+
+    // Present Address — required by backend
+    newErrors.street = '';
+    newErrors.city = '';
+    newErrors.stateName = '';
+    newErrors.pincode = '';
+    if (!street || !street.trim()) {
+      newErrors.street = 'Street / address line is required.';
+      hasError = true;
+    }
+    if (!city || !city.trim()) {
+      newErrors.city = 'City is required.';
+      hasError = true;
+    }
+    if (!stateName || !stateName.trim()) {
+      newErrors.stateName = 'State is required.';
+      hasError = true;
+    }
+    if (!pincode || !String(pincode).trim()) {
+      newErrors.pincode = 'Pincode is required.';
+      hasError = true;
+    } else if (!/^\d{4,6}$/.test(String(pincode).trim())) {
+      newErrors.pincode = 'Pincode must be 4 to 6 digits.';
+      hasError = true;
     }
 
     setErrors(prev => ({ ...prev, ...newErrors }));
@@ -1032,7 +1084,8 @@ const NewStaffForm = ({ navigation, route }) => {
     const relationValue = relation?.value || relation || '';
     formData.append('relation', relationValue);
 
-    formData.append('aadhar_number', aadharNumber?.trim() || '');
+    // Normalize Aadhaar (strip ALL whitespace) so backend exact/normalized match hits
+    formData.append('aadhar_number', (aadharNumber || '').replace(/\s+/g, ''));
 
     // Work Details - all optional (staff can be a fresher)
 
@@ -1142,6 +1195,11 @@ const NewStaffForm = ({ navigation, route }) => {
     }
 
     formData.append('is_staff_added', 1);
+
+    const jobId = route?.params?.job_id || data?.job_id || data?.job?.id;
+    if (jobId) {
+      formData.append('job_id', String(jobId));
+    }
 
     // If adding an existing user as staff, pass their user_id
     if (data?.id && !isEditMode) {
@@ -1504,6 +1562,65 @@ const NewStaffForm = ({ navigation, route }) => {
             }}
             allowFutureDates={false}
             error={errors.dateOfBirth}
+          />
+
+          {/* Present Address — backend requires street/city/state/pincode */}
+          <Typography
+            type={Font?.Poppins_SemiBold}
+            style={[styles.sectionTitle, { marginTop: 12, marginBottom: 8 }]}
+          >
+            Present Address
+          </Typography>
+
+          <Input
+            style_title={{ color: '#8C8D8B' }}
+            placeholder={'House / Flat / Street / Area'}
+            title={'Street / Address Line'}
+            value={street}
+            onChange={value => {
+              setStreet(value);
+              clearError('street');
+            }}
+            error={errors.street}
+          />
+
+          <Input
+            style_title={{ color: '#8C8D8B' }}
+            placeholder={'Enter 6-digit pincode'}
+            title={'Pincode'}
+            value={pincode}
+            onChange={value => {
+              const digits = value.replace(/[^0-9]/g, '').slice(0, 6);
+              setPincode(digits);
+              clearError('pincode');
+            }}
+            keyboardType="number-pad"
+            maxLength={6}
+            error={errors.pincode}
+          />
+
+          <Input
+            style_title={{ color: '#8C8D8B' }}
+            placeholder={'City'}
+            title={'City'}
+            value={city}
+            onChange={value => {
+              setCity(value);
+              clearError('city');
+            }}
+            error={errors.city}
+          />
+
+          <Input
+            style_title={{ color: '#8C8D8B' }}
+            placeholder={'State'}
+            title={'State'}
+            value={stateName}
+            onChange={value => {
+              setStateName(value);
+              clearError('stateName');
+            }}
+            error={errors.stateName}
           />
 
         </View>

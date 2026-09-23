@@ -126,6 +126,11 @@ public function index(Request $request): JsonResponse
     $user = Auth::guard('api')->user();
     
     $jobs = Job::select('jobs.*')->withCount('applications', 'users')
+              ->when($request->filled('status'), function ($query) use ($request) {
+                  $query->where('status', $request->status);
+              }, function ($query) {
+                  $query->where('status', 'open');
+              })
               ->when($user, function ($query) use ($user, $request) {
                   // Add select for is_applied
                   $query->addSelect([
@@ -295,6 +300,12 @@ public function index(Request $request): JsonResponse
             
             $job->hires_count = $hiresCount;
             $job->users_count = $hiresCount;
+
+            $requiredOpenings = (int) ($job->openings ?: 1);
+            if ($job->status === 'open' && ($acceptedAppsCount >= $requiredOpenings || $jobStaffCount >= $requiredOpenings)) {
+                $job->status = 'closed';
+                Job::where('id', $job->id)->update(['status' => 'closed']);
+            }
             return $job;
         });
 
@@ -347,6 +358,12 @@ public function index(Request $request): JsonResponse
 
             $job->hires_count = $hiresCount;
             $job->users_count = $hiresCount;
+
+            $requiredOpenings = (int) ($job->openings ?: 1);
+            if ($job->status === 'open' && ($acceptedAppsCount >= $requiredOpenings || $jobStaffCount >= $requiredOpenings)) {
+                $job->status = 'closed';
+                Job::where('id', $job->id)->update(['status' => 'closed']);
+            }
             return $job;
         });
 
@@ -498,6 +515,7 @@ public function index(Request $request): JsonResponse
                 'pet_care_required' => 'boolean',
                 'additional_requirements' => 'nullable|string',
                 'required_skills' => 'nullable|string',
+                'openings' => 'nullable|integer|min:1',
                 'status' => 'nullable|in:pending,open,closed'
             ]);
 
@@ -608,7 +626,8 @@ public function index(Request $request): JsonResponse
             'first_aid_certified' => 'boolean',
             'pet_care_required' => 'boolean',
             'additional_requirements' => 'nullable|string',
-            'required_skills' => 'nullable|string'
+            'required_skills' => 'nullable|string',
+            'openings' => 'nullable|integer|min:1'
         ]);
 
         if ($validator->fails()) {
@@ -619,7 +638,18 @@ public function index(Request $request): JsonResponse
             ], 422);
         }
 
-        $job->update($validator->validated());
+        $validated = $validator->validated();
+        if (isset($validated['status']) && $validated['status'] === 'open') {
+            $acceptedCount = JobApplication::where('job_id', $job->id)
+                ->whereIn('application_status', ['accepted', 'hired', 'approved'])
+                ->count();
+            $newOpenings = isset($validated['openings']) ? (int)$validated['openings'] : (int)($job->openings ?: 1);
+            if ($acceptedCount >= $newOpenings) {
+                $validated['status'] = 'closed';
+            }
+        }
+
+        $job->update($validated);
 
         return response()->json([
             'status' => 'success',

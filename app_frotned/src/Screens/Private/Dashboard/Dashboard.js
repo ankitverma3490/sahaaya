@@ -212,6 +212,16 @@ const Dashboard = ({ navigation }) => {
     const itemStatus = getStaffStatus(item);
     const isActive = !['inactive', 'terminated', 'absent'].includes(itemStatus) && (itemStatus === 'active' || itemStatus === 'hired' || itemStatus === 'present' || itemStatus === 'accepted' || itemStatus === 'approved');
 
+    const rawJoiningDate = item?.joining_date || item?.scheduled_start_date || item?.user_work_info?.joining_date || item?.staff?.user_work_info?.joining_date;
+    const todayStr = moment().format('YYYY-MM-DD');
+    const isScheduledFuture = Boolean(item?.is_scheduled) || (Boolean(rawJoiningDate) && rawJoiningDate > todayStr);
+
+    let scheduledLabel = item?.scheduled_label;
+    if (!scheduledLabel && isScheduledFuture && rawJoiningDate) {
+      const dateObj = moment(rawJoiningDate);
+      scheduledLabel = `Scheduled from ${dateObj.isValid() ? dateObj.format('MMM Do') : rawJoiningDate}`;
+    }
+
     return (
       <View style={styles.card}>
         <TouchableOpacity 
@@ -226,40 +236,56 @@ const Dashboard = ({ navigation }) => {
             </Typography>
           </View>
         </TouchableOpacity>
-        <View style={[styles.dot, { backgroundColor: getStatusColor(itemStatus) }]} />
-        {isActive && (
-          <View style={styles.statusRow}>
-            {['present', 'absent', 'late'].map(s => {
-              const currentStatus = status[item.id] || item?.attendance_details?.status || item?.attendance_status || 'present';
-              const isSelected = currentStatus === s;
-              return (
-                <TouchableOpacity
-                  key={s}
-                  style={[styles.statusBtn, isSelected && styles[`${s}Btn`]]}
-                  onPress={() => {
-                    if (s === 'absent' || s === 'late') {
-                      setLeaveModal({ visible: true, type: s, staff: item, remarks: '', leaveType: null, lateDuration: null });
-                      setModalErrors({});
-                    } else {
-                      handleStatusChange(item, s);
-                    }
-                  }}
-                >
-                  <Image
-                    source={s === 'present' ? ImageConstant?.present : s === 'absent' ? ImageConstant?.absent : ImageConstant?.late}
-                    tintColor={isSelected ? '#fff' : '#000'}
-                    style={{ width: 16, height: 16, marginRight: 6 }}
-                  />
-                  <Typography
-                    type={Font?.Poppins_Medium}
-                    color={isSelected ? '#fff' : '#000'}
-                  >
-                    {s === 'present' ? LocalizedStrings.Dashboard?.Present : s === 'absent' ? LocalizedStrings.Dashboard?.Absent : LocalizedStrings.Dashboard?.Late}
-                  </Typography>
-                </TouchableOpacity>
-              );
-            })}
+        <View style={[styles.dot, { backgroundColor: isScheduledFuture ? '#FF9800' : getStatusColor(itemStatus) }]} />
+        {isScheduledFuture ? (
+          <View style={styles.scheduledContainer}>
+            <Image
+              source={ImageConstant?.calendar || ImageConstant?.clock || ImageConstant?.Time}
+              style={{ width: 16, height: 16, tintColor: '#D98579', marginRight: 8 }}
+            />
+            <Typography
+              type={Font?.Poppins_Medium}
+              size={14}
+              color="#D98579"
+            >
+              {scheduledLabel || 'Scheduled for future start'}
+            </Typography>
           </View>
+        ) : (
+          isActive && (
+            <View style={styles.statusRow}>
+              {['present', 'absent', 'late'].map(s => {
+                const currentStatus = status[item.id] || item?.attendance_details?.status || item?.attendance_status || 'present';
+                const isSelected = currentStatus === s;
+                return (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.statusBtn, isSelected && styles[`${s}Btn`]]}
+                    onPress={() => {
+                      if (s === 'absent' || s === 'late') {
+                        setLeaveModal({ visible: true, type: s, staff: item, remarks: '', leaveType: null, lateDuration: null });
+                        setModalErrors({});
+                      } else {
+                        handleStatusChange(item, s);
+                      }
+                    }}
+                  >
+                    <Image
+                      source={s === 'present' ? ImageConstant?.present : s === 'absent' ? ImageConstant?.absent : ImageConstant?.late}
+                      tintColor={isSelected ? '#fff' : '#000'}
+                      style={{ width: 16, height: 16, marginRight: 6 }}
+                    />
+                    <Typography
+                      type={Font?.Poppins_Medium}
+                      color={isSelected ? '#fff' : '#000'}
+                    >
+                      {s === 'present' ? LocalizedStrings.Dashboard?.Present : s === 'absent' ? LocalizedStrings.Dashboard?.Absent : LocalizedStrings.Dashboard?.Late}
+                    </Typography>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )
         )}
       </View>
     );
@@ -491,6 +517,18 @@ const styles = StyleSheet.create({
   avatar: { width: 45, height: 45, borderRadius: 22, marginRight: 12 },
   dot: { width: 10, height: 10, position: 'absolute', borderRadius: 10, right: 10, top: 10, backgroundColor: '#ccc' },
   statusRow: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' },
+  scheduledContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF5F4',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FFE0DC',
+    marginTop: 4,
+  },
   statusBtn: {
     flex: 1, minWidth: 80, maxWidth: '32%', marginHorizontal: 3, borderWidth: 1, borderColor: '#ccc',
     borderRadius: 8, paddingVertical: 8, alignItems: 'center', flexDirection: 'row', paddingHorizontal: 6, justifyContent: 'center',

@@ -42,7 +42,7 @@ class AttendanceController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'staff_id' => 'required|exists:users,id',
-            'date' => 'required|date',
+            'date' => 'required|date|before_or_equal:today',
             'status' => 'required|in:present,absent,late,holiday',
             'check_in_time' => 'nullable',
             'late_minutes' => 'nullable|integer|min:1',
@@ -53,9 +53,28 @@ class AttendanceController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'status' => false,
-                'message' => 'Validation error',
+                'message' => $validator->errors()->first('date') && str_contains($validator->errors()->first('date'), 'before')
+                    ? 'Cannot mark attendance for a future date.'
+                    : 'Validation error',
                 'errors' => $validator->errors()
             ], 422);
+        }
+
+        // Ownership: only the employer who added this staff (or an admin panel user,
+        // or the staff marking their own attendance) may write attendance.
+        $authUser = Auth::guard('api')->user();
+        $staff = \App\Models\User::find($request->input('staff_id'));
+        if (
+            $authUser && $staff
+            && !$authUser->is_admin_panel_user
+            && (int) $staff->id !== (int) $authUser->id
+            && (int) $staff->added_by !== (int) $authUser->id
+            && (int) $staff->parent_user_id !== (int) $authUser->id
+        ) {
+            return response()->json([
+                'status' => false,
+                'message' => 'You are not allowed to mark attendance for this staff member.',
+            ], 403);
         }
 
         DB::beginTransaction();
@@ -151,7 +170,7 @@ class AttendanceController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'staff_id' => 'required|exists:users,id',
-            'date' => 'required|date',
+            'date' => 'required|date|before_or_equal:today',
             'status' => 'required|in:present,absent,late,holiday',
             'check_in_time' => 'nullable',
             'late_minutes' => 'nullable|integer|min:1',
@@ -162,7 +181,9 @@ class AttendanceController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'status' => false,
-                'message' => 'Validation error',
+                'message' => $validator->errors()->first('date') && str_contains($validator->errors()->first('date'), 'before')
+                    ? 'Cannot mark attendance for a future date.'
+                    : 'Validation error',
                 'errors' => $validator->errors()
             ], 422);
         }

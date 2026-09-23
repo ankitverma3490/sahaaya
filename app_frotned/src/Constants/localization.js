@@ -295,7 +295,7 @@ export default new LocalizedStrings({
       Aadhaar_Number: 'Aadhaar Number',
       Aadhaar_Placeholder: 'Enter 12-digit Aadhaar Number',
       Submit: 'Submit',
-      Verify: 'Aadhaar - OTP Verification',
+      Verify: 'Enter Staff Aadhaar OTP',
       Description:
         'An OTP has been sent to the mobile number linked with staff Aadhaar XXXX-XXXX-',
       OTP_Placeholders: 'Enter 6-digit OTP',
@@ -517,7 +517,7 @@ export default new LocalizedStrings({
       note: 'We use Aadhaar for identity verification and to prevent fraudulent listings, enhancing trust within the Sahayya community.'
     },
     AadhaarOTPVerification: {
-      title: 'Aadhaar - OTP Verification',
+      title: 'Enter Staff Aadhaar OTP',
       message: 'An OTP has been sent to the mobile number linked with staff Aadhaar.',
       otp_placeholder: 'Enter 6-digit OTP',
       not_received: "Didn't receive the OTP?",

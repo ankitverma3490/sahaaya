@@ -292,18 +292,14 @@ class SalaryController extends Controller
                 ], 404);
             }
 
-            // Double-click protection (Idempotency - 10s window)
+            $employerId = Auth::guard('api')->id();
             $currentPeriod = date('F Y');
-            if (Payment::where('staff_id', $user_id)
-                ->where('user_id', Auth::guard('api')->id())
-                ->where('salary_period', $currentPeriod)
-                ->where('created_at', '>=', now()->subSeconds(10))
-                ->exists()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Processing payment, please wait...'
-                ], 400);
-            }
+
+            // Save-only request: compute/return salary breakdown WITHOUT creating
+            // a Payment row or firing a "Salary Paid" notification.
+            $isSaveOnly = $request->boolean('save_only')
+                || $request->input('status') === 'draft'
+                || $request->input('action') === 'save';
 
             $validator = Validator::make($request->all(), [
                 'base_salary' => 'nullable|numeric|min:0',
@@ -336,39 +332,120 @@ class SalaryController extends Controller
             // Base + Bonus + Overtime - IT - PF
             $netSalary = max(0, $baseSalary + $performanceBonus + $overtimePay - $taxDeduction - $pfDeduction);
 
-            $paymentId = 'PAY_' . strtoupper(uniqid());
-            $orderId = 'SAL_' . strtoupper(uniqid());
-            $transactionId = 'TXN_' . strtoupper(uniqid());
-
-            // Determine status: default to 'paid' for cash, 'pending' for others unless specified
-            $status = $request->status;
-            if (!$status) {
-                $status = (strtolower($paymentMode) === 'cash') ? 'paid' : 'pending';
+            // Agreed monthly salary (source of truth) — never pay more than this in a period.
+            $workInfo = \App\Models\UserWorkInfo::where('user_id', $user_id)->first();
+            $agreedMonthly = 0.0;
+            if ($workInfo && (float) ($workInfo->salary ?? 0) > 0) {
+                $agreedMonthly = (float) $workInfo->salary;
+            } elseif ((float) ($user->salary ?? 0) > 0) {
+                $agreedMonthly = (float) $user->salary;
+            } else {
+                $acceptedApp = \App\Models\JobApplication::where('user_id', $user_id)
+                    ->where('application_status', 'accepted')
+                    ->with('job')
+                    ->first();
+                if ($acceptedApp && $acceptedApp->job && (float) ($acceptedApp->job->compensation ?? 0) > 0) {
+                    $agreedMonthly = (float) $acceptedApp->job->compensation;
+                }
             }
 
-            $employerId = Auth::guard('api')->id();
+            if (!$isSaveOnly) {
+                DB::beginTransaction();
+                try {
+                    // Lock the staff row so two concurrent "Pay" taps serialize here.
+                    User::where('id', $user_id)->lockForUpdate()->first();
 
-            DB::beginTransaction();
-            try {
-                $payment = Payment::create([
-                    'user_id' => $employerId,
-                    'staff_id' => $user_id,
-                    'amount' => $netSalary,
-                    'payment_id' => $paymentId,
-                    'order_id' => $orderId,
-                    'status' => $status,
-                    'payment_mode' => $paymentMode,
-                    'base_salary' => $baseSalary,
-                    'performance_bonus' => $performanceBonus,
-                    'overtime_pay' => $overtimePay,
-                    'tax_deduction' => $taxDeduction,
-                    'pf_deduction' => $pfDeduction,
-                    'advance_payment' => 0,
-                    'net_salary' => $netSalary,
-                    'salary_period' => $currentPeriod,
-                ]);
+                    // Double-click protection (10s) — keep for instant double-taps.
+                    $recentDup = Payment::where('staff_id', $user_id)
+                        ->where('user_id', $employerId)
+                        ->where('salary_period', $currentPeriod)
+                        ->where('created_at', '>=', now()->subSeconds(10))
+                        ->exists();
+                    if ($recentDup) {
+                        DB::rollBack();
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'Payment is already being processed. Please wait a moment.'
+                        ], 400);
+                    }
 
-                DB::commit();
+                    // Full-period duplicate / overpayment guard (THE real fix).
+                    $alreadyPaid = (float) Payment::where('staff_id', $user_id)
+                        ->where('user_id', $employerId)
+                        ->where('salary_period', $currentPeriod)
+                        ->whereIn('status', ['paid', 'completed'])
+                        ->lockForUpdate()
+                        ->sum('net_salary');
+
+                    if ($agreedMonthly > 0) {
+                        $remaining = round($agreedMonthly - $alreadyPaid, 2);
+                        if ($remaining <= 0) {
+                            DB::rollBack();
+                            return response()->json([
+                                'status' => false,
+                                'message' => 'Salary for ' . $currentPeriod . ' is already fully paid (₹' . number_format($agreedMonthly, 2) . '). No further payment allowed.',
+                                'error_code' => 'SALARY_ALREADY_PAID',
+                                'already_paid' => $alreadyPaid,
+                                'agreed_salary' => $agreedMonthly,
+                                'remaining' => 0,
+                            ], 422);
+                        }
+                        if ($netSalary > $remaining + 0.009) {
+                            DB::rollBack();
+                            return response()->json([
+                                'status' => false,
+                                'message' => 'Payment of ₹' . number_format($netSalary, 2) . ' exceeds remaining salary for ' . $currentPeriod . ' (₹' . number_format($remaining, 2) . ' left of ₹' . number_format($agreedMonthly, 2) . ').',
+                                'error_code' => 'SALARY_EXCEEDS_REMAINING',
+                                'already_paid' => $alreadyPaid,
+                                'agreed_salary' => $agreedMonthly,
+                                'remaining' => $remaining,
+                            ], 422);
+                        }
+                    } elseif ($alreadyPaid > 0 && $netSalary > 0) {
+                        // No agreed salary configured — still block a second paid row
+                        // for the same period so 5–6 duplicate taps can never happen.
+                        DB::rollBack();
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'A salary payment for ' . $currentPeriod . ' already exists. Set the staff agreed salary to allow partial/top-up payments.',
+                            'error_code' => 'SALARY_ALREADY_PAID',
+                            'already_paid' => $alreadyPaid,
+                            'remaining' => 0,
+                        ], 422);
+                    }
+
+                    $paymentId = 'PAY_' . strtoupper(uniqid());
+                    $orderId = 'SAL_' . strtoupper(uniqid());
+                    $transactionId = 'TXN_' . strtoupper(uniqid());
+
+                    $status = $request->status;
+                    if (!$status) {
+                        $status = (strtolower($paymentMode) === 'cash') ? 'paid' : 'pending';
+                    }
+
+                    $payment = Payment::create([
+                        'user_id' => $employerId,
+                        'staff_id' => $user_id,
+                        'amount' => $netSalary,
+                        'payment_id' => $paymentId,
+                        'order_id' => $orderId,
+                        'status' => $status,
+                        'payment_mode' => $paymentMode,
+                        'base_salary' => $baseSalary,
+                        'performance_bonus' => $performanceBonus,
+                        'overtime_pay' => $overtimePay,
+                        'tax_deduction' => $taxDeduction,
+                        'pf_deduction' => $pfDeduction,
+                        'advance_payment' => 0,
+                        'net_salary' => $netSalary,
+                        'salary_period' => $currentPeriod,
+                    ]);
+
+                    DB::commit();
+                } catch (\Throwable $e) {
+                    DB::rollBack();
+                    throw $e;
+                }
 
                 // Notify staff member about salary payment only if successful
                 if ($status === 'paid' || $status === 'completed') {
@@ -384,53 +461,56 @@ class SalaryController extends Controller
                         \Log::error('Salary notification failed: ' . $e->getMessage());
                     }
                 }
-            } catch (\Exception $e) {
-                DB::rollBack();
-                throw $e;
-            }
 
-            // Create Transaction and Salary records
-            try {
-                Transaction::create([
-                    'user_id' => $user_id,
-                    'transaction_id' => $transactionId,
-                    'type' => 'salary',
-                    'order_id' => $orderId,
-                    'order_number' => $orderId,
-                    'reference_id' => $paymentId,
-                    'amount' => $netSalary,
-                    'currency' => 'INR',
-                    'payment_mode' => $paymentMode,
-                    'payment_status' => $status,
-                    'created_by' => $employerId,
-                    'payment_response' => json_encode([
-                        'base_salary' => $baseSalary,
-                        'performance_bonus' => $performanceBonus,
-                        'overtime_pay' => $overtimePay,
-                        'tax_deduction' => $taxDeduction,
+                // Create Transaction and Salary records
+                try {
+                    Transaction::create([
+                        'user_id' => $user_id,
+                        'transaction_id' => $transactionId,
+                        'type' => 'salary',
+                        'order_id' => $orderId,
+                        'order_number' => $orderId,
+                        'reference_id' => $paymentId,
+                        'amount' => $netSalary,
+                        'currency' => 'INR',
+                        'payment_mode' => $paymentMode,
+                        'payment_status' => $status,
+                        'created_by' => $employerId,
+                        'payment_response' => json_encode([
+                            'base_salary' => $baseSalary,
+                            'performance_bonus' => $performanceBonus,
+                            'overtime_pay' => $overtimePay,
+                            'tax_deduction' => $taxDeduction,
+                            'pf_deduction' => $pfDeduction,
+                            'net_salary' => $netSalary,
+                            'period' => date('F Y')
+                        ]),
+                        'for_entry' => 'salary_payment'
+                    ]);
+
+                    \App\Models\Salary::create([
+                        'staff_id' => $user_id,
+                        'houseowner_id' => $employerId,
+                        'basic_salary' => $baseSalary,
+                        'performative_allowance' => $performanceBonus,
+                        'over_time_allowance' => $overtimePay,
+                        'tax' => $taxDeduction,
                         'pf_deduction' => $pfDeduction,
+                        'advance_payment' => 0,
                         'net_salary' => $netSalary,
-                        'period' => date('F Y')
-                    ]),
-                    'for_entry' => 'salary_payment'
-                ]);
-
-                \App\Models\Salary::create([
-                    'staff_id' => $user_id,
-                    'houseowner_id' => $employerId,
-                    'basic_salary' => $baseSalary,
-                    'performative_allowance' => $performanceBonus,
-                    'over_time_allowance' => $overtimePay,
-                    'tax' => $taxDeduction,
-                    'pf_deduction' => $pfDeduction,
-                    'advance_payment' => 0,
-                    'net_salary' => $netSalary,
-                    'payment_mode' => $paymentMode,
-                    'status' => $status,
-                    'payment_date' => now()->toDateString(),
-                ]);
-            } catch (\Exception $e) {
-                \Log::error('Failed to create Transaction/Salary record: ' . $e->getMessage());
+                        'payment_mode' => $paymentMode,
+                        'status' => $status,
+                        'payment_date' => now()->toDateString(),
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to create Transaction/Salary record: ' . $e->getMessage());
+                }
+            } else {
+                // Save-only: keep payment IDs synthetic for the response shape.
+                $paymentId = 'SAVE_' . strtoupper(uniqid());
+                $orderId = 'SALSAVE_' . strtoupper(uniqid());
+                $transactionId = 'TXNSAVE_' . strtoupper(uniqid());
+                $status = 'draft';
             }
 
             $salaryData = [
@@ -470,11 +550,14 @@ class SalaryController extends Controller
                 'pf_deduction' => (float) $pfDeduction,
                 'advance_payment' => 0,
                 'net_salary' => (float) $netSalary,
+                'agreed_salary' => (float) $agreedMonthly,
             ];
 
             return response()->json([
                 'status' => true,
-                'message' => 'Salary updated and payment processed successfully',
+                'message' => $isSaveOnly
+                    ? 'Salary details saved successfully'
+                    : 'Salary updated and payment processed successfully',
                 'data' => $salaryData
             ]);
 
@@ -1000,6 +1083,7 @@ private function getWorkingDays($startDate, $endDate)
                     'id' => $payment->id,
                     'payment_id' => $payment->payment_id || `PAY-${payment->id}`,
                     'type' => 'salary',
+                    'staff_id' => $payment->staff_id,
                     'amount' => (float) $payment->net_salary,
                     'net_salary' => (float) $payment->net_salary,
                     'payment_mode' => $payment->payment_mode,
@@ -1010,6 +1094,10 @@ private function getWorkingDays($startDate, $endDate)
                     'staff_name' => $payment->staff 
                         ? (trim($payment->staff->first_name . ' ' . $payment->staff->last_name) ?: ($payment->staff->name ?: 'Staff Member'))
                         : 'Unknown',
+                    'staff_member' => $payment->staff ? [
+                        'id' => $payment->staff_id,
+                        'name' => trim($payment->staff->first_name . ' ' . $payment->staff->last_name) ?: ($payment->staff->name ?: 'Staff Member'),
+                    ] : null,
                 ]);
             }
 

@@ -431,7 +431,7 @@ const job_compensation_type = route?.params?.job_compensation_type || 'monthly';
       <View style={styles.centerContainer}>
         <View style={styles.card}>
           <Typography type={Font?.Poppins_SemiBold} style={styles.otpTitle}>
-            {LocalizedStrings.AddStaff?.Verify || 'Verify Aadhaar OTP'}
+            {LocalizedStrings.AddStaff?.Verify || 'Enter Staff Aadhaar OTP'}
           </Typography>
           <Typography type={Font?.Poppins_Regular} style={styles.otpDesc}>
             {'An OTP has been sent to the mobile number linked with staff Aadhaar'}{' '}
