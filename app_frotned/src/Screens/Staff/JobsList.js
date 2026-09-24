@@ -164,10 +164,11 @@ const JobsList = ({ navigation }) => {
                                             {getDescriptionPreview(job.description)}
                                         </Typography>
                                         <Button
-                                            title={LocalizedStrings.staffSection?.ActiveJobs?.view_details || "View Details"}
-                                            style={styles.button}
+                                            title={(job?.is_applied == 1 || job?.is_applied === true) ? "Applied" : (LocalizedStrings.staffSection?.ActiveJobs?.view_details || "View Details")}
+                                            style={[styles.button, (job?.is_applied == 1 || job?.is_applied === true) && { backgroundColor: '#777' }]}
                                             textStyle={styles.buttonText}
-                                            onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
+                                            disabled={job?.is_applied == 1 || job?.is_applied === true}
+                                            onPress={() => navigation.navigate('JobDetails', { jobId: job.id, jobStatus: job?.is_applied })}
                                         />
                                     </View>
                                 ))}
@@ -214,10 +215,11 @@ const JobsList = ({ navigation }) => {
                                             {getDescriptionPreview(job.description)}
                                         </Typography>
                                         <Button
-                                            title={LocalizedStrings.staffSection?.ActiveJobs?.view_details || "View Details"}
-                                            style={styles.button}
+                                            title={(job?.is_applied == 1 || job?.is_applied === true) ? "Applied" : (LocalizedStrings.staffSection?.ActiveJobs?.view_details || "View Details")}
+                                            style={[styles.button, (job?.is_applied == 1 || job?.is_applied === true) && { backgroundColor: '#777' }]}
                                             textStyle={styles.buttonText}
-                                            onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
+                                            disabled={job?.is_applied == 1 || job?.is_applied === true}
+                                            onPress={() => navigation.navigate('JobDetails', { jobId: job.id, jobStatus: job?.is_applied })}
                                         />
                                     </View>
                                 ))}

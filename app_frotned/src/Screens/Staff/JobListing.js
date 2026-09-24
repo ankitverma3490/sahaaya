@@ -433,17 +433,18 @@ const JobsList = ({ navigation }) => {
 
       {/* Action Button */}
       <TouchableOpacity
-        style={[styles.detailsBtn, job?.is_applied === 1 && { backgroundColor: '#777' }]}
+        style={[styles.detailsBtn, (job?.is_applied == 1 || job?.is_applied === true) && { backgroundColor: '#777' }]}
         onPress={() =>
           navigation.navigate('JobDetails', {
             jobId: job.id,
             jobStatus: job?.is_applied,
           })
         }
+        disabled={job?.is_applied == 1 || job?.is_applied === true}
         activeOpacity={0.85}
       >
         <Typography type={Font.Poppins_SemiBold} size={13} color="#fff">
-          {job?.is_applied === 1 
+          {(job?.is_applied == 1 || job?.is_applied === true) 
             ? 'Applied' 
             : (LocalizedStrings.staffSection?.ActiveJobs?.view_details || 'View Details')}
         </Typography>
