@@ -4366,6 +4366,18 @@ public function deleteUserByAdmin(Request $request)
         // Mark as deleted
         \DB::transaction(function () use ($userToDelete, $adminUser) {
             $userToDelete->deleteAllUserData();
+            
+            $deleteSuffix = '_deleted_' . time();
+            if ($userToDelete->phone_number) {
+                $userToDelete->phone_number = $userToDelete->phone_number . $deleteSuffix;
+            }
+            if ($userToDelete->email) {
+                $userToDelete->email = $userToDelete->email . $deleteSuffix;
+            }
+            if ($userToDelete->aadhar_number) {
+                $userToDelete->aadhar_number = $userToDelete->aadhar_number . $deleteSuffix;
+            }
+
             $userToDelete->is_deleted = 1;
             $userToDelete->status = 'deleted';
             $userToDelete->is_active = 0;
