@@ -1334,8 +1334,9 @@ class StaffController extends Controller
                 }
 
                 // Auto-present only from joining date onward (startDate already clamped),
-                // only on configured working days, and only if employer enabled auto attendance.
-                if ($autoEnabled && in_array($day3, $workingDays3)) {
+                // only on configured working days (or today, to match owner dashboard),
+                // and only if employer enabled auto attendance.
+                if ($autoEnabled && (in_array($day3, $workingDays3) || $formattedDate === $today)) {
                     $result[] = [
                         'date' => $formattedDate,
                         'status' => 'present'
