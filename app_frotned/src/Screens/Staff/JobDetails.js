@@ -567,13 +567,15 @@ const JobDetails = ({ navigation, route }) => {
 
           <Button
             title={
-              checkingLimit
+              Number(jobStatus) === 1
+                ? 'Applied'
+                : checkingLimit
                 ? 'Checking...'
                 : (LocalizedStrings.staffSection?.JobDetails?.apply_now || 'Apply Now')
             }
-            style={styles.applyBtn}
+            style={[styles.applyBtn, Number(jobStatus) === 1 && { backgroundColor: '#777' }]}
             title_style={styles.applyText}
-            disabled={checkingLimit}
+            disabled={checkingLimit || Number(jobStatus) === 1}
             onPress={handleApplyJob}
           />
         </ScrollView>

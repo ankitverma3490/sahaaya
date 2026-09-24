@@ -387,13 +387,6 @@ const JobsList = ({ navigation }) => {
             style={{ height: 18, width: 18, tintColor: '#D98579' }}
           />
         </View>
-        {job.stay_type ? (
-          <View style={styles.stayTypeBadge}>
-            <Typography type={Font.Poppins_Medium} size={11} color="#D98579">
-              {job.stay_type === 'both' ? 'Live-in / Come & Go' : (job.stay_type === 'come_and_go' ? 'Come & Go' : 'Live-in')}
-            </Typography>
-          </View>
-        ) : null}
       </View>
 
       {/* Job Title */}
@@ -440,7 +433,7 @@ const JobsList = ({ navigation }) => {
 
       {/* Action Button */}
       <TouchableOpacity
-        style={styles.detailsBtn}
+        style={[styles.detailsBtn, job?.is_applied === 1 && { backgroundColor: '#777' }]}
         onPress={() =>
           navigation.navigate('JobDetails', {
             jobId: job.id,
@@ -450,7 +443,9 @@ const JobsList = ({ navigation }) => {
         activeOpacity={0.85}
       >
         <Typography type={Font.Poppins_SemiBold} size={13} color="#fff">
-          {LocalizedStrings.staffSection?.ActiveJobs?.view_details || 'View Details'}
+          {job?.is_applied === 1 
+            ? 'Applied' 
+            : (LocalizedStrings.staffSection?.ActiveJobs?.view_details || 'View Details')}
         </Typography>
       </TouchableOpacity>
     </View>
