@@ -3349,8 +3349,8 @@ public function saveAadharAndSendOtp(Request $request)
         if ($request->is_staff_add == 1) {
 
             // Check if Aadhaar already belongs to someone (normalized match)
-            $existingUser = User::where('aadhar_number', $request->aadhar_number)->first()
-                ?? User::whereRaw("REPLACE(aadhar_number, ' ', '') = ?", [$request->aadhar_number])->first();
+            $existingUser = User::withTrashed()->where('aadhar_number', $request->aadhar_number)->first()
+                ?? User::withTrashed()->whereRaw("REPLACE(aadhar_number, ' ', '') = ?", [$request->aadhar_number])->first();
             
             if ($authUser && $authUser->aadhar_number == $request->aadhar_number) {
                 return response()->json([
@@ -3461,42 +3461,48 @@ public function saveAadharAndSendOtp(Request $request)
         // ==========================================
         if (!empty($user->aadhar_number)) {
 
-            // User already has Aadhaar saved, cannot change it
+            // User already has Aadhaar saved, cannot change it IF verified
             if ($user->aadhar_number !== $request->aadhar_number) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Aadhaar number cannot be changed once saved.'
-                ], 400);
-            }
+                if ($user->aadhar__verify) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Aadhaar number cannot be changed once verified.'
+                    ], 400);
+                } else {
+                    // Not verified yet, they probably made a typo. Let them change it,
+                    // but we will process it down below as a NEW Aadhaar save.
+                    $user->aadhar_number = null; // Clear it to fall through to NEW logic
+                }
+            } else {
+                // Same Aadhaar number, just resend OTP
+                $otpResult = $sendOtpHandler($request->aadhar_number);
+                
+                if (!$otpResult['success']) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => $otpResult['message'] ?? 'Failed to send OTP'
+                    ], 400);
+                }
+                
+                $user->aadhar_reference_id = $otpResult['reference_id'];
+                $user->aadhar_number_otp_expire_at = Carbon::now()->addMinutes(10);
+                $user->save();
 
-            // Resend OTP
-            $otpResult = $sendOtpHandler($request->aadhar_number);
-            
-            if (!$otpResult['success']) {
                 return response()->json([
-                    'status' => false,
-                    'message' => $otpResult['message'] ?? 'Failed to send OTP'
-                ], 400);
+                    'status' => true,
+                    'message' => 'OTP sent successfully to registered mobile number',
+                    'reference_id' => $otpResult['reference_id'],
+                ], 200);
             }
-            
-            $user->aadhar_reference_id = $otpResult['reference_id'];
-            $user->aadhar_number_otp_expire_at = Carbon::now()->addMinutes(10);
-            $user->save();
-
-            return response()->json([
-                'status' => true,
-                'message' => 'OTP sent successfully to registered mobile number',
-                'reference_id' => $otpResult['reference_id'],
-            ], 200);
         }
 
+        if (empty($user->aadhar_number)) {
 
         // ==========================================
         // CHECK IF THIS AADHAAR BELONGS TO ANOTHER USER
         // ==========================================
-        $existingUser = User::where('aadhar_number', $request->aadhar_number)
-            ->where('id', '!=', $user->id)
-            ->first();
+        $existingUser = User::withTrashed()->where('aadhar_number', $request->aadhar_number)->where('id', '!=', $user->id)->first()
+            ?? User::withTrashed()->whereRaw("REPLACE(aadhar_number, ' ', '') = ?", [$request->aadhar_number])->where('id', '!=', $user->id)->first();
 
         if ($existingUser) {
             if (empty($existingUser->aadhar__verify) || $existingUser->aadhar__verify == 0) {
@@ -4203,11 +4209,15 @@ public function deleteSelfAccount(Request $request)
             // --- Soft-delete the user row (keeps FK references valid, frees phone/email) ---
             $user->is_deleted = 1;
             $user->deleted_at = now();
+            $deleteSuffix = '_deleted_' . time();
             if ($user->phone_number) {
-                $user->phone_number = $user->phone_number . '_deleted_' . time();
+                $user->phone_number = $user->phone_number . $deleteSuffix;
             }
             if ($user->email) {
-                $user->email = $user->email . '_deleted_' . time();
+                $user->email = $user->email . $deleteSuffix;
+            }
+            if ($user->aadhar_number) {
+                $user->aadhar_number = $user->aadhar_number . $deleteSuffix;
             }
             $user->save();
 
