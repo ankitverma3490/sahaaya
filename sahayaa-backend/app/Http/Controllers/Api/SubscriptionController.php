@@ -303,6 +303,7 @@ class SubscriptionController extends Controller
                     'wallet_used' => $wallet_used,
                     'currency' => 'INR',
                     'payment_status' => 'pending',
+                    'status' => 'pending',
                     'role' => $user->user_role_id,
                     'type' => 'credit',
                     'start_date' => now(),
