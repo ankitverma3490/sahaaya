@@ -141,35 +141,35 @@ public function index(Request $request): JsonResponse
 
                   // Automatically filter by role and location if user is staff (role 2)
                   // and no specific filters are provided in request
-                  if ($user->user_role_id == 2 && !$request->filled('role') && !$request->filled('city')) {
-                      // Get staff roles and cities
+                  if ($user->user_role_id == 2) {
                       $workInfo = $user->userWorkInfo;
-                      $primaryAddress = $user->addresses()->first();
                       
-                      $staffRole = $workInfo ? $workInfo->primary_role : null;
-                      $prefLoc = $workInfo ? $workInfo->preferred_work_location : null;
-
-                      // Parse all roles into array
-                      $rolesArray = [];
-                      if (is_array($staffRole)) {
-                          $rolesArray = $staffRole;
-                      } elseif (is_string($staffRole) && !empty($staffRole)) {
-                          $cleanStr = str_replace(['[', ']', '"', "'"], '', $staffRole);
-                          $rolesArray = array_map('trim', explode(',', $cleanStr));
-                      }
-
-                      if (!empty($rolesArray)) {
-                          $query->where(function($q) use ($rolesArray) {
-                              foreach ($rolesArray as $r) {
-                                  if (!empty($r)) {
-                                      $q->orWhere('title', 'LIKE', '%' . $r . '%')
-                                        ->orWhere('description', 'LIKE', '%' . $r . '%');
+                      // Auto-apply Role filter if not in request
+                      if (!$request->filled('role')) {
+                          $staffRole = $workInfo ? $workInfo->primary_role : null;
+                          $rolesArray = [];
+                          if (is_array($staffRole)) {
+                              $rolesArray = $staffRole;
+                          } elseif (is_string($staffRole) && !empty($staffRole)) {
+                              $cleanStr = str_replace(['[', ']', '"', "'"], '', $staffRole);
+                              $rolesArray = array_map('trim', explode(',', $cleanStr));
+                          }
+                          
+                          if (!empty($rolesArray)) {
+                              $query->where(function($q) use ($rolesArray) {
+                                  foreach ($rolesArray as $r) {
+                                      if (!empty($r)) {
+                                          $q->orWhere('title', 'LIKE', '%' . $r . '%')
+                                            ->orWhere('description', 'LIKE', '%' . $r . '%');
+                                      }
                                   }
-                              }
-                          });
+                              });
+                          }
                       }
 
-                      // Parse all preferred cities + all addresses cities into array
+                      // Auto-apply City filter if not in request
+                      if (!$request->filled('city')) {
+                          $prefLoc = $workInfo ? $workInfo->preferred_work_location : null;
                       $citiesArray = [];
                       $allAddresses = $user->addresses()->get();
                       foreach ($allAddresses as $addr) {
@@ -210,6 +210,7 @@ public function index(Request $request): JsonResponse
                                 ->orWhere('state', 'LIKE', '%India%');
                           });
                       }
+                  } // close city block
                   }
               })
               ->when($request->filled('role'), function ($query) use ($request) {
