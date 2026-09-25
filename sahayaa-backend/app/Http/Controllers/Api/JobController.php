@@ -169,10 +169,13 @@ public function index(Request $request): JsonResponse
                           });
                       }
 
-                      // Parse all preferred cities + primary city into array
+                      // Parse all preferred cities + all addresses cities into array
                       $citiesArray = [];
-                      if ($primaryAddress && $primaryAddress->city) {
-                          $citiesArray[] = trim($primaryAddress->city);
+                      $allAddresses = $user->addresses()->get();
+                      foreach ($allAddresses as $addr) {
+                          if ($addr->city) {
+                              $citiesArray[] = trim($addr->city);
+                          }
                       }
                       if ($prefLoc) {
                           if (is_array($prefLoc)) {
@@ -184,9 +187,17 @@ public function index(Request $request): JsonResponse
                               }
                           }
                       }
+                      
+                      $isStaffAllIndia = false;
                       $citiesArray = array_unique(array_filter($citiesArray));
+                      foreach ($citiesArray as $c) {
+                          if (stripos($c, 'All India') !== false || stripos($c, 'Anywhere') !== false) {
+                              $isStaffAllIndia = true;
+                              break;
+                          }
+                      }
 
-                      if (!empty($citiesArray)) {
+                      if (!$isStaffAllIndia && !empty($citiesArray)) {
                           $query->where(function($q) use ($citiesArray) {
                               foreach ($citiesArray as $cityItem) {
                                   $q->orWhere('city', 'LIKE', '%' . $cityItem . '%')
