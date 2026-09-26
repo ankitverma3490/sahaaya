@@ -18,7 +18,7 @@ export const APP_ENV = 'production'; // 'development' | 'production'
 // MAIN BACKEND API
 // ===========================================
 // Production URL (Remote Live Backend)
-const PRODUCTION_API_URL = 'https://sahaaya-production-8076.up.railway.app/api/';
+const PRODUCTION_API_URL = 'https://sahayaa-backend-production.up.railway.app/api/';
 
 // Local Development Settings
 // - Your machine's local Wi-Fi IP:
