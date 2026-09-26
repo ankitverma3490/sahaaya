@@ -124,6 +124,7 @@ private function normalizeJobLocationInput(Request $request): void
 public function index(Request $request): JsonResponse
 {
     $user = Auth::guard('api')->user();
+    \Log::info("JobController@index called by User " . ($user ? $user->id : 'Guest') . " with Params: " . json_encode($request->all()));
     
     $jobs = Job::select('jobs.*')->withCount('applications', 'users')
               ->when($request->filled('status'), function ($query) use ($request) {
@@ -239,11 +240,16 @@ public function index(Request $request): JsonResponse
                         ->orWhere('state', 'LIKE', '%India%');
                   });
               })
-              ->orderBy('created_at', 'desc')
-              ->get();
+              ->orderBy('created_at', 'desc');
+
+    \Log::info("SQL Query: " . $jobs->toSql());
+    \Log::info("Bindings: " . json_encode($jobs->getBindings()));
+    
+    $jobs = $jobs->get();
 
     $userOrigin = $this->getUserCoordinates($user);
     $jobs = $this->applyJobProximity($jobs, $userOrigin);
+    \Log::info("Returned Jobs Count: " . $jobs->count());
     
     if (!$user) {
         $jobs->each(function ($job) {
