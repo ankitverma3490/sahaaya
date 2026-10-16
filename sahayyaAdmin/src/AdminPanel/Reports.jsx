@@ -55,15 +55,15 @@ const Reports = () => {
       revenuePoints.length > 0
         ? revenuePoints.map((item) => item.label)
         : filter === "monthly"
-          ? ["Week 1", "Week 2", "Week 3", "Week 4"]
-          : ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+          ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+          : ["2022", "2023", "2024", "2025", "2026"],
     datasets: [
       {
         label: "Revenue",
         data:
           revenuePoints.length > 0
             ? revenuePoints.map((item) => item.revenue ?? item.amount ?? 0)
-            : [0, 0, 0, 0],
+            : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: "#D98C7A",
         borderRadius: 8,
       },

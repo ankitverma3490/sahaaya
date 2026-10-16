@@ -43,8 +43,8 @@ class DashboardController extends Controller
         $houseOwnerRole = Role::where('slug', 'householder')->first();
 
         return [
-            'staff_role_id' => $staffRole?->id,
-            'house_owner_role_id' => $houseOwnerRole?->id,
+            'staff_role_id' => $staffRole?->id ?? 2,
+            'house_owner_role_id' => $houseOwnerRole?->id ?? 3,
         ];
     }
 
@@ -57,10 +57,10 @@ class DashboardController extends Controller
     {
         $roleIds = $this->resolveRoleIds();
         $staffDataCount = $roleIds['staff_role_id']
-            ? User::where('user_role_id', $roleIds['staff_role_id'])->count()
+            ? User::where('user_role_id', $roleIds['staff_role_id'])->where('is_deleted', 0)->count()
             : 0;
         $houseOwnerDataCount = $roleIds['house_owner_role_id']
-            ? User::where('user_role_id', $roleIds['house_owner_role_id'])->count()
+            ? User::where('user_role_id', $roleIds['house_owner_role_id'])->where('is_deleted', 0)->count()
             : 0;
         $openJobCount = Job::whereIn('status', ['open', 'active'])->count();
         $presentAttendanceCount = Attendance::where('date', Carbon::today())->where('status', 'present')->count();
@@ -146,72 +146,47 @@ class DashboardController extends Controller
         }
         
         $type = $request->type;
-        
-        // Date filter
-        if ($type == 'monthly') {
-            $startDate = Carbon::now()->startOfMonth();
-            $endDate   = Carbon::now()->endOfMonth();
-        } else {
-            $startDate = Carbon::now()->startOfYear();
-            $endDate   = Carbon::now()->endOfYear();
-        }
-        
         $roleIds = $this->resolveRoleIds();
 
+        // 1. Total platform metrics (shown in top summary cards)
         $staffDataCount = $roleIds['staff_role_id']
-            ? User::where('user_role_id', $roleIds['staff_role_id'])
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->count()
+            ? User::where('user_role_id', $roleIds['staff_role_id'])->where('is_deleted', 0)->count()
             : 0;
         
         $houseOwnerDataCount = $roleIds['house_owner_role_id']
-            ? User::where('user_role_id', $roleIds['house_owner_role_id'])
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->count()
+            ? User::where('user_role_id', $roleIds['house_owner_role_id'])->where('is_deleted', 0)->count()
             : 0;
 
-        $openJobCount = Job::whereIn('status', ['open', 'active'])
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->count();
+        $openJobCount = Job::count();
 
-        $paidSubscriptions = $this->getPaidSubscriptionEntries($startDate, $endDate);
-        $memberSubscriptionRevenue = $paidSubscriptions->sum(function ($subscriptionUser) {
+        // Total active/paid subscription revenue
+        $allPaidSubscriptions = SubscriptionUser::with('subscription')
+            ->whereIn('payment_status', ['paid', 'completed'])
+            ->get();
+        $memberSubscriptionRevenue = (float) $allPaidSubscriptions->sum(function ($subscriptionUser) {
             return $this->resolveSubscriptionRevenue($subscriptionUser);
         });
-        $memberSalarySum = Salary::whereBetween('payment_date', [$startDate, $endDate])
-            ->where('status', 'paid')
-            ->sum('net_salary');
-        
-        $presentAttendanceCount = Attendance::whereBetween('date', [$startDate, $endDate])
-            ->where('status', 'present')
-            ->count();
 
-        $absentAttendanceCount = Attendance::whereBetween('date', [$startDate, $endDate])
-            ->where('status', 'absent')
-            ->count();
+        $memberSalarySum = (float) Salary::where('status', 'paid')->sum('net_salary');
         
-        $leaveCount = Attendance::whereBetween('date', [$startDate, $endDate])
-            ->where('status', 'leave')
-            ->count();
+        $presentAttendanceCount = Attendance::where('status', 'present')->count();
+        $absentAttendanceCount = Attendance::where('status', 'absent')->count();
+        $leaveCount = Attendance::where('status', 'leave')->count();
         $totalAttendance = $presentAttendanceCount + $absentAttendanceCount + $leaveCount;
-        $attendanceRate = $totalAttendance > 0  ? round(($presentAttendanceCount / $totalAttendance) * 100, 2) : 0;
+        $attendanceRate = $totalAttendance > 0 ? round(($presentAttendanceCount / $totalAttendance) * 100, 2) : 0;
         
+        // 2. Job Status Overview
         $jobStatusOverview = Job::select('status', DB::raw('COUNT(*) as total'))
-            ->whereBetween('created_at', [$startDate, $endDate])
             ->groupBy('status')
             ->pluck('total', 'status');
 
+        // 3. Application Status Overview
         $applicationStatusOverview = JobApplication::select('application_status', DB::raw('COUNT(*) as total'))
-            ->whereBetween('created_at', [$startDate, $endDate])
             ->groupBy('application_status')
             ->pluck('total', 'application_status');
 
-        $topJobPostings = Job::withCount([
-                'applications as applications_count' => function ($query) use ($startDate, $endDate) {
-                    $query->whereBetween('created_at', [$startDate, $endDate]);
-                }
-            ])
-            ->whereBetween('created_at', [$startDate, $endDate])
+        // 4. Top Job Postings
+        $topJobPostings = Job::withCount('applications')
             ->orderByDesc('applications_count')
             ->limit(5)
             ->get(['id', 'title', 'city', 'status'])
@@ -219,7 +194,7 @@ class DashboardController extends Controller
                 return [
                     'id' => $job->id,
                     'title' => $job->title,
-                    'city' => $job->city,
+                    'city' => $job->city ?? 'N/A',
                     'status' => $job->status,
                     'applications_count' => (int) $job->applications_count,
                 ];
@@ -232,52 +207,55 @@ class DashboardController extends Controller
         $rejectedApplications = (int) ($applicationStatusOverview['rejected'] ?? 0);
         $totalApplications = $acceptedApplications + $reviewedApplications + $pendingApplications + $rejectedApplications;
 
-        
+        // 5. Revenue Overview Chart
         $revenueOverview = [];
         if ($type == 'monthly') {
-            $revenues = $paidSubscriptions
-                ->groupBy(function ($subscriptionUser) {
-                    return Carbon::parse($subscriptionUser->created_at)->format('Y-m-d');
-                })
-                ->map(function ($subscriptionEntries, $date) {
-                    return [
-                        'date' => $date,
-                        'total' => $subscriptionEntries->sum(function ($subscriptionUser) {
-                            return $this->resolveSubscriptionRevenue($subscriptionUser);
-                        }),
-                    ];
-                })
-                ->sortBy('date')
-                ->values();
-            foreach ($revenues as $revenue) {
+            // Month-by-month revenue for the current year (Jan to Dec)
+            $startOfYear = Carbon::now()->startOfYear();
+            $endOfYear = Carbon::now()->endOfYear();
+            $yearSubs = SubscriptionUser::with('subscription')
+                ->whereBetween('created_at', [$startOfYear, $endOfYear])
+                ->whereIn('payment_status', ['paid', 'completed'])
+                ->get()
+                ->groupBy(function ($sub) {
+                    return (int) Carbon::parse($sub->created_at)->format('n');
+                });
+
+            for ($m = 1; $m <= 12; $m++) {
+                $monthSubs = $yearSubs->get($m, collect());
+                $monthTotal = (float) $monthSubs->sum(function ($sub) {
+                    return $this->resolveSubscriptionRevenue($sub);
+                });
                 $revenueOverview[] = [
-                    'label' => Carbon::parse($revenue['date'])->format('d M'),
-                    'revenue' => (float) $revenue['total'],
-                    'amount' => (float) $revenue['total'],
+                    'label' => Carbon::create()->month($m)->format('M'),
+                    'revenue' => $monthTotal,
+                    'amount' => $monthTotal,
                 ];
             }
         } else {
-            $startDate = Carbon::now()->startOfYear();
+            // Yearly revenue for past 5 years
+            $currentYear = Carbon::now()->year;
+            $startYear = $currentYear - 4;
+            $startDate = Carbon::create($startYear, 1, 1)->startOfDay();
             $endDate = Carbon::now()->endOfYear();
-            $revenues = $this->getPaidSubscriptionEntries($startDate, $endDate)
-                ->groupBy(function ($subscriptionUser) {
-                    return Carbon::parse($subscriptionUser->created_at)->format('n');
-                })
-                ->map(function ($subscriptionEntries, $month) {
-                    return [
-                        'month' => (int) $month,
-                        'total' => $subscriptionEntries->sum(function ($subscriptionUser) {
-                            return $this->resolveSubscriptionRevenue($subscriptionUser);
-                        }),
-                    ];
-                })
-                ->sortBy('month')
-                ->values();
-            foreach ($revenues as $revenue) {
+
+            $yearlySubs = SubscriptionUser::with('subscription')
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->whereIn('payment_status', ['paid', 'completed'])
+                ->get()
+                ->groupBy(function ($sub) {
+                    return Carbon::parse($sub->created_at)->format('Y');
+                });
+
+            for ($y = $startYear; $y <= $currentYear; $y++) {
+                $ySubs = $yearlySubs->get((string) $y, collect());
+                $yearTotal = (float) $ySubs->sum(function ($sub) {
+                    return $this->resolveSubscriptionRevenue($sub);
+                });
                 $revenueOverview[] = [
-                    'label' => Carbon::create()->month($revenue['month'])->format('M'),
-                    'revenue' => (float) $revenue['total'],
-                    'amount' => (float) $revenue['total'],
+                    'label' => (string) $y,
+                    'revenue' => $yearTotal,
+                    'amount' => $yearTotal,
                 ];
             }
         }
@@ -309,10 +287,11 @@ class DashboardController extends Controller
                     : 0,
             ],
             'top_job_postings' => $topJobPostings,
-            'chartdata' =>  [
+            'chartdata' => [
                 'revenue_overview' => $revenueOverview
             ]
         ];
+
         return response()->json([
             'status' => 'success',
             'data' => $data,
