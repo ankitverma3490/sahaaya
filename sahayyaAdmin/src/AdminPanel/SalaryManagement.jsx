@@ -19,10 +19,11 @@ const SalaryManagement = () => {
 
   const salaries = useMemo(() => pageData?.data || [], [pageData]);
 
-  const fetchSalaries = async () => {
+  const fetchSalaries = async (page = 1) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      if (page) params.set('page', page);
       if (filters.name) params.set('name', filters.name);
       if (filters.month) params.set('month', filters.month);
       if (filters.status) params.set('status', filters.status);
@@ -37,7 +38,7 @@ const SalaryManagement = () => {
   };
 
   useEffect(() => {
-    fetchSalaries();
+    fetchSalaries(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -216,7 +217,7 @@ const SalaryManagement = () => {
                         </div>
                         <small className="text-muted">ID: {salary?.staff_id}</small>
                       </td>
-                      <td>{salary?.payment_date || '-'}</td>
+                      <td>{salary?.salary_month || salary?.month || (salary?.payment_date ? new Date(salary.payment_date).toLocaleString('default', { month: 'short', year: 'numeric' }) : '-')}</td>
                       <td className="fw-bold">INR {Number(salary?.net_salary || 0).toFixed(2)}</td>
                       <td>{salary?.payment_mode || '-'}</td>
                       <td>{salary?.payment_date || '-'}</td>
@@ -268,9 +269,27 @@ const SalaryManagement = () => {
           </span>
           <nav>
             <ul className="pagination pagination-sm mb-0">
-              <li className={`page-item ${pageData?.prev_page_url ? '' : 'disabled'}`}>
-                <button className="page-link" onClick={fetchSalaries} disabled={!pageData?.prev_page_url}>
-                  Reload
+              <li className={`page-item ${pageData?.current_page > 1 ? '' : 'disabled'}`}>
+                <button
+                  className="page-link"
+                  onClick={() => fetchSalaries((pageData?.current_page || 1) - 1)}
+                  disabled={!(pageData?.current_page > 1)}
+                >
+                  Previous
+                </button>
+              </li>
+              <li className="page-item disabled">
+                <span className="page-link">
+                  Page {pageData?.current_page || 1} of {pageData?.last_page || 1}
+                </span>
+              </li>
+              <li className={`page-item ${pageData?.current_page < (pageData?.last_page || 1) ? '' : 'disabled'}`}>
+                <button
+                  className="page-link"
+                  onClick={() => fetchSalaries((pageData?.current_page || 1) + 1)}
+                  disabled={!(pageData?.current_page < (pageData?.last_page || 1))}
+                >
+                  Next
                 </button>
               </li>
             </ul>

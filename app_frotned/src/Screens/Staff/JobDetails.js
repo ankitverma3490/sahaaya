@@ -145,7 +145,7 @@ const JobDetails = ({ navigation, route }) => {
 
   // Handle Apply Job with credit balance check
   const handleApplyJob = () => {
-    if (Number(jobStatus) === 1) {
+    if (Number(jobStatus) === 1 || Number(jobData?.is_applied) === 1) {
       SimpleToast.show('You have already applied for this job.',
         SimpleToast.SHORT,
       );
@@ -567,15 +567,15 @@ const JobDetails = ({ navigation, route }) => {
 
           <Button
             title={
-              Number(jobStatus) === 1
+              (Number(jobStatus) === 1 || Number(jobData?.is_applied) === 1)
                 ? 'Applied'
                 : checkingLimit
                 ? 'Checking...'
                 : (LocalizedStrings.staffSection?.JobDetails?.apply_now || 'Apply Now')
             }
-            style={[styles.applyBtn, Number(jobStatus) === 1 && { backgroundColor: '#777' }]}
+            style={[styles.applyBtn, (Number(jobStatus) === 1 || Number(jobData?.is_applied) === 1) && { backgroundColor: '#777' }]}
             title_style={styles.applyText}
-            disabled={checkingLimit || Number(jobStatus) === 1}
+            disabled={checkingLimit || (Number(jobStatus) === 1 || Number(jobData?.is_applied) === 1)}
             onPress={handleApplyJob}
           />
         </ScrollView>

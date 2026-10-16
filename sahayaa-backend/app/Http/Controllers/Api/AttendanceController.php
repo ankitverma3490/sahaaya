@@ -64,9 +64,10 @@ class AttendanceController extends Controller
         // or the staff marking their own attendance) may write attendance.
         $authUser = Auth::guard('api')->user();
         $staff = \App\Models\User::find($request->input('staff_id'));
+        $isAdmin = $authUser && ((int) $authUser->user_role_id === 1 || (bool) $authUser->is_admin_panel_user);
         if (
             $authUser && $staff
-            && !$authUser->is_admin_panel_user
+            && !$isAdmin
             && (int) $staff->id !== (int) $authUser->id
             && (int) $staff->added_by !== (int) $authUser->id
             && (int) $staff->parent_user_id !== (int) $authUser->id

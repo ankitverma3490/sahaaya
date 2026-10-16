@@ -12,7 +12,7 @@ const Notifications = () => {
     title: '',
     message: '',
     type: 'push',
-    audience: 'all_users'
+    audience: 'all'
   });
 
   const fetchNotifications = async () => {
@@ -20,7 +20,12 @@ const Notifications = () => {
       setLoading(true);
       const res = await axiosInstance.get('/admin/notifications');
       if (res.data.success) {
-        setNotifications(res.data.data);
+        const list = Array.isArray(res.data.data?.data)
+          ? res.data.data.data
+          : Array.isArray(res.data.data)
+          ? res.data.data
+          : [];
+        setNotifications(list);
       }
     } catch (error) {
       toast.error('Failed to fetch notifications log');
@@ -45,9 +50,10 @@ const Notifications = () => {
       const res = await axiosInstance.post('/admin/notifications/send', sendForm);
       if (res.data.success) {
         toast.success(res.data.message || 'Notification Sent');
-        setSendForm({ title: '', message: '', type: 'push', audience: 'all_users' });
+        setSendForm({ title: '', message: '', type: 'push', audience: 'all' });
         const modal = window.bootstrap?.Modal?.getInstance(document.getElementById("sendNotificationModal"));
         modal?.hide();
+        fetchNotifications();
       }
     } catch (error) {
       toast.error('Failed to send notification');
@@ -131,17 +137,20 @@ const Notifications = () => {
                 notifications.map((notif) => (
                   <tr key={notif.id}>
                     <td className="w-50">
-                      <div className="fw-semibold text-dark">{notif.message}</div>
+                      <div className="fw-semibold text-dark">
+                        {notif.title ? <span className="text-primary me-1">[{notif.title}]</span> : null}
+                        {notif.message}
+                      </div>
                     </td>
                     <td>
                       <span className="badge bg-light text-dark border">{notif.type}</span>
                     </td>
                     <td className="text-muted small">
-                      {notif.date}
+                      {notif.created_at ? new Date(notif.created_at).toLocaleString() : (notif.date || 'N/A')}
                     </td>
                     <td>
-                      <i className={`bi bi-circle-fill me-2 small ${getPriorityClass(notif.priority)}`}></i>
-                      {notif.priority}
+                      <i className={`bi bi-circle-fill me-2 small ${getPriorityClass(notif.priority || 'Normal')}`}></i>
+                      {notif.priority || 'Normal'}
                     </td>
                   </tr>
                 ))
@@ -168,7 +177,7 @@ const Notifications = () => {
                     value={sendForm.audience}
                     onChange={(e) => setSendForm({...sendForm, audience: e.target.value})}
                   >
-                    <option value="all_users">All App Users (Home Owners & Staff)</option>
+                    <option value="all">All App Users (Home Owners & Staff)</option>
                     <option value="home_owners">Only Home Owners</option>
                     <option value="staff">Only Staff</option>
                     <option value="paid_members">Paid Members Only</option>

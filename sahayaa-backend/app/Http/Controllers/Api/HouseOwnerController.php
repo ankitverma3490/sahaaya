@@ -38,9 +38,10 @@ class HouseOwnerController extends Controller
             if (!empty($status)) {
                 $query->where('status', $status);
             }
-            $users = $query->latest()->paginate(10);
+            $perPage = $request->input('per_page', 15);
+            $users = $query->latest()->paginate($perPage);
         } else {
-            $users = User::where('id', Auth::id())->get();
+            $users = User::where('id', Auth::id())->paginate(15);
         }
 
         return response()->json([

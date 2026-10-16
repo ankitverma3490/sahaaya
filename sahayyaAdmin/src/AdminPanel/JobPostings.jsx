@@ -13,13 +13,21 @@ const JobPostings = () => {
   const [applicationsLoading, setApplicationsLoading] = useState(false);
   const [selectedJobIdForApps, setSelectedJobIdForApps] = useState(null);
 
-  const fetchJobs = async () => {
+  const [pagination, setPagination] = useState({ current_page: 1, last_page: 1, total: 0 });
+
+  const fetchJobs = async (page = 1) => {
     try {
-      const res = await axiosInstance.get("/admin/jobs/list");
+      const res = await axiosInstance.get(`/admin/jobs/list?page=${page}&per_page=15`);
 
       if (res.data.status === "success") {
-        setJobs(res.data.data.data);
-        setFilteredJobs(res.data.data.data);
+        const list = res.data.data?.data || [];
+        setJobs(list);
+        setFilteredJobs(list);
+        setPagination({
+          current_page: res.data.data?.current_page || page,
+          last_page: res.data.data?.last_page || 1,
+          total: res.data.data?.total || list.length,
+        });
       }
     } catch (error) {
       console.log(error);
@@ -28,22 +36,33 @@ const JobPostings = () => {
 
   const fetchOwners = async () => {
     try {
-      const res = await axiosInstance.get("/admin/houseowners");
+      const res = await axiosInstance.get("/admin/houseowners?per_page=100");
 
       if (res.data.success) {
-        setOwners(res.data.data.data);
+        setOwners(res.data.data?.data || res.data.data || []);
       }
     } catch (error) {
       console.log(error);
     }
   };
 
-  const getOwnerName = (id) => {
+  const getOwnerName = (jobOrId) => {
+    if (typeof jobOrId === 'object' && jobOrId !== null) {
+      const creator = jobOrId.creator || jobOrId.user;
+      if (creator) {
+        const name = `${creator.first_name || ""} ${creator.last_name || ""}`.trim() || creator.name;
+        if (name) return name;
+      }
+      jobOrId = jobOrId.created_by;
+    }
+    const id = jobOrId;
     const owner = owners.find((item) => item.id === id);
 
-    if (!owner) return "Unknown";
+    if (owner) {
+      return `${owner.first_name || ""} ${owner.last_name || ""}`.trim() || owner.name || `Owner #${id}`;
+    }
 
-    return `${owner.first_name || ""} ${owner.last_name || ""}`.trim();
+    return id ? `Owner #${id}` : "Unknown Owner";
   };
 
   const formatCurrency = (value) => {
@@ -128,7 +147,8 @@ const JobPostings = () => {
   };
 
   const changeStatus = async (job) => {
-    const newStatus = job.status === "active" ? "paused" : "active";
+    const isCurrentlyActive = job.status === "active" || job.status === "open";
+    const newStatus = isCurrentlyActive ? "paused" : "open";
 
     try {
       await axiosInstance.post(`/admin/jobs/${job.id}/status`, {
@@ -136,7 +156,7 @@ const JobPostings = () => {
       });
 
       toast.success("Status Updated");
-      fetchJobs();
+      fetchJobs(pagination.current_page);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed");
     }
@@ -147,7 +167,7 @@ const JobPostings = () => {
       await axiosInstance.delete(`/admin/jobs/${jobId}`);
 
       toast.success("Job deleted");
-      fetchJobs();
+      fetchJobs(pagination.current_page);
     } catch (error) {
       toast.error("Delete failed");
     }
@@ -166,7 +186,7 @@ const JobPostings = () => {
   }, [search, jobs]);
 
   useEffect(() => {
-    fetchJobs();
+    fetchJobs(1);
     fetchOwners();
   }, []);
 
@@ -206,7 +226,7 @@ const JobPostings = () => {
             <tbody>
               {filteredJobs.map((job) => (
                 <tr key={job.id}>
-                  <td>{getOwnerName(job.created_by)}</td>
+                  <td>{getOwnerName(job)}</td>
                   <td className="fw-bold">{job.title}</td>
                   <td>{[job.street_address, job.city].filter(Boolean).join(", ")}</td>
                   <td>{formatCurrency(getCompensationValue(job))}</td>
@@ -221,7 +241,7 @@ const JobPostings = () => {
                   <td>
                     <span
                       className={`badge ${
-                        job.status === "active"
+                        job.status === "active" || job.status === "open"
                           ? "bg-success-subtle text-success"
                           : "bg-secondary-subtle text-secondary"
                       }`}
@@ -253,7 +273,7 @@ const JobPostings = () => {
                         className="btn btn-sm btn-outline-warning"
                         onClick={() => changeStatus(job)}
                       >
-                        {job.status === "active" ? "Pause" : "Activate"}
+                        {job.status === "active" || job.status === "open" ? "Pause" : "Activate"}
                       </button>
 
                       <button
@@ -269,6 +289,39 @@ const JobPostings = () => {
             </tbody>
           </table>
         </div>
+
+        {pagination.last_page > 1 && (
+          <div className="d-flex justify-content-between align-items-center mt-3">
+            <small className="text-muted">Total: {pagination.total} jobs</small>
+            <nav>
+              <ul className="pagination pagination-sm mb-0">
+                <li className={`page-item ${pagination.current_page === 1 ? "disabled" : ""}`}>
+                  <button
+                    className="page-link"
+                    onClick={() => fetchJobs(pagination.current_page - 1)}
+                    disabled={pagination.current_page === 1}
+                  >
+                    Previous
+                  </button>
+                </li>
+                <li className="page-item disabled">
+                  <span className="page-link">
+                    Page {pagination.current_page} of {pagination.last_page}
+                  </span>
+                </li>
+                <li className={`page-item ${pagination.current_page === pagination.last_page ? "disabled" : ""}`}>
+                  <button
+                    className="page-link"
+                    onClick={() => fetchJobs(pagination.current_page + 1)}
+                    disabled={pagination.current_page === pagination.last_page}
+                  >
+                    Next
+                  </button>
+                </li>
+              </ul>
+            </nav>
+          </div>
+        )}
 
         <div className="modal fade" id="viewJobModal">
           <div className="modal-dialog modal-xl modal-dialog-centered">

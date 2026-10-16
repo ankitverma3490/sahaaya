@@ -1104,21 +1104,6 @@ const PostNewJob = ({ navigation, route }) => {
               />
             </View>
           </View>
-          <Typography
-            style={{ fontSize: 14, fontFamily: Font.Poppins_Medium, color: '#565D6D', marginBottom: 6, marginTop: 14 }}
-          >
-            Number of Staff Needed
-          </Typography>
-          <Input
-            title=""
-            showTitle={false}
-            mainStyle={{ marginVertical: 0 }}
-            placeholder="e.g. 1"
-            value={openings}
-            onChange={val => setOpenings(val ? val.replace(/[^0-9]/g, '') : '')}
-            keyboardType="numeric"
-            style_inputContainer={{ height: 52, borderRadius: 12, backgroundColor: '#FAFAFA' }}
-          />
         </View>
 
         <View style={styles.card}>

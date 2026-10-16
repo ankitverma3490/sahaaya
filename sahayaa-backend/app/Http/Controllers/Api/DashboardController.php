@@ -62,10 +62,7 @@ class DashboardController extends Controller
         $houseOwnerDataCount = $roleIds['house_owner_role_id']
             ? User::where('user_role_id', $roleIds['house_owner_role_id'])->count()
             : 0;
-        $openJobCount = Job::where('status', 'open')->count();
-        $presentAttendanceCount = Attendance::where('date', Carbon::today())->where('status', 'present')->count();
-        $absentAttendanceCount = Attendance::where('date', Carbon::today())->where('status', 'absent')->count();
-        $openJobCount = Job::where('status', 'open')->count();
+        $openJobCount = Job::whereIn('status', ['open', 'active'])->count();
         $presentAttendanceCount = Attendance::where('date', Carbon::today())->where('status', 'present')->count();
         $absentAttendanceCount = Attendance::where('date', Carbon::today())->where('status', 'absent')->count();
         
@@ -173,7 +170,7 @@ class DashboardController extends Controller
             ->count()
             : 0;
 
-        $openJobCount = Job::where('status', 'open')
+        $openJobCount = Job::whereIn('status', ['open', 'active'])
             ->whereBetween('created_at', [$startDate, $endDate])
             ->count();
 

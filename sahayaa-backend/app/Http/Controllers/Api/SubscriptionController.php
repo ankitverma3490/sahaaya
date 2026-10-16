@@ -567,22 +567,23 @@ class SubscriptionController extends Controller
     public function getSubscriptionHistory()
     {
         $user = Auth::user();
-
-        if($user->user_role_id == 1) {
+        $perPage = request()->input('per_page', 15);
+        if ($user && $user->user_role_id == 1) {
             $subscriptions = SubscriptionUser::with([
                 'subscription',
                 'user:id,first_name,last_name,name,email,user_role_id'
             ])
                 ->orderBy('created_at', 'desc')
-                ->paginate(10);
+                ->paginate($perPage);
         } else {
+            $perPage = request()->input('per_page', 15);
             $subscriptions = SubscriptionUser::with([
                 'subscription',
                 'user:id,first_name,last_name,name,email,user_role_id'
             ])
                 ->where('user_id', $user->id)
                 ->orderBy('created_at', 'desc')
-                ->paginate(10);
+                ->paginate($perPage);
         }
     
         return response()->json([

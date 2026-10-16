@@ -256,8 +256,24 @@ public function index(Request $request): JsonResponse
             $job->is_applied = 0;
         });
     } else {
-        $jobs->each(function ($job) {
-            $job->is_applied = $job->is_applied > 0 ? 1 : 0;
+        // Fetch all owner IDs where this staff has an active/accepted employment
+        $employedOwnerIds = \App\Models\JobApplication::where('user_id', $user->id)
+            ->whereIn('application_status', ['accepted', 'approved', 'hired', 'active'])
+            ->join('jobs', 'job_applications.job_id', '=', 'jobs.id')
+            ->pluck('jobs.created_by')
+            ->map(fn($id) => (int)$id)
+            ->filter()
+            ->toArray();
+
+        if ($user->added_by) {
+            $employedOwnerIds[] = (int) $user->added_by;
+        }
+        $employedOwnerIds = array_unique($employedOwnerIds);
+
+        $jobs->each(function ($job) use ($employedOwnerIds) {
+            $hasApplied = $job->is_applied > 0;
+            $isSameOwner = in_array((int) $job->created_by, $employedOwnerIds, true);
+            $job->is_applied = ($hasApplied || $isSameOwner) ? 1 : 0;
         });
     }
 
@@ -547,6 +563,7 @@ public function index(Request $request): JsonResponse
             }
             $job = Job::create(array_merge($validator->validated(), [
                 'created_by' => $userId,
+                'openings' => 1,
                 'status' => $request->input('status', 'pending')
             ]));
 
@@ -594,6 +611,25 @@ public function index(Request $request): JsonResponse
             'state' => $primaryAddress?->state,
             'locality' => $primaryAddress?->locality,
         ]);
+
+        $user = Auth::guard('api')->user();
+        if ($user) {
+            $hasApplied = \App\Models\JobApplication::where('job_id', $job->id)->where('user_id', $user->id)->exists();
+            $isSameOwner = false;
+            if ($user->added_by && (int)$user->added_by === (int)$job->created_by) {
+                $isSameOwner = true;
+            } else {
+                $isSameOwner = \App\Models\JobApplication::where('user_id', $user->id)
+                    ->whereIn('application_status', ['accepted', 'approved', 'hired', 'active'])
+                    ->whereHas('job', function ($q) use ($job) {
+                        $q->where('created_by', $job->created_by);
+                    })
+                    ->exists();
+            }
+            $job->setAttribute('is_applied', ($hasApplied || $isSameOwner) ? 1 : 0);
+        } else {
+            $job->setAttribute('is_applied', 0);
+        }
 
         return response()->json([
             'status' => 'success',
@@ -657,6 +693,7 @@ public function index(Request $request): JsonResponse
         }
 
         $validated = $validator->validated();
+        $validated['openings'] = 1;
         if (isset($validated['status']) && $validated['status'] === 'open') {
             $acceptedCount = JobApplication::where('job_id', $job->id)
                 ->whereIn('application_status', ['accepted', 'hired', 'approved'])
@@ -712,9 +749,9 @@ public function index(Request $request): JsonResponse
      */
     public function updateStatus(Request $request, int $id): JsonResponse
     {
-        // Validate the request body
+        // Validate the request body - accept open, active, pending, closed, paused
         $validator = Validator::make($request->all(), [
-            'status' => 'required|in:pending,open,closed,paused'
+            'status' => 'required|in:pending,open,closed,paused,active'
         ]);
 
         // If validation fails, return a 422 response with errors
@@ -726,8 +763,14 @@ public function index(Request $request): JsonResponse
             ], 422);
         }
 
-        // Find the job by ID and verify ownership
-        $job = Job::where('id', $id)->where('created_by', Auth::guard('api')->id())->first();
+        $authUser = Auth::guard('api')->user() ?: Auth::user();
+
+        // Find the job by ID - allow admin (user_role_id == 1) to update any job
+        $query = Job::where('id', $id);
+        if ($authUser && $authUser->user_role_id != 1) {
+            $query->where('created_by', $authUser->id);
+        }
+        $job = $query->first();
 
         // If the job is not found, return a 404 response
         if (!$job) {
@@ -753,7 +796,8 @@ public function index(Request $request): JsonResponse
         $user = Auth::guard('api')->user() ?: Auth::user();
         $userId = $user?->id;
 
-        $query = Job::withCount('users');
+        $query = Job::with(['creator:id,first_name,last_name,name,phone_number', 'user:id,first_name,last_name,name,phone_number'])
+            ->withCount('users');
 
         if ($userId) {
             $query->addSelect([
@@ -763,7 +807,8 @@ public function index(Request $request): JsonResponse
             ]);
         }
 
-        $jobs = $query->orderBy('created_at', 'desc')->paginate(10);
+        $perPage = $request->input('per_page', 15);
+        $jobs = $query->orderBy('created_at', 'desc')->paginate($perPage);
         
         if (!$userId) {
             $jobs->getCollection()->transform(function ($job) {

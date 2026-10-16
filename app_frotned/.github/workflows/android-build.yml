@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK & AAB
 
 on:
   workflow_dispatch:
@@ -11,8 +11,9 @@ permissions:
 
 jobs:
   build:
-    name: Build Release APK
+    name: Build Release APK & AAB
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -22,12 +23,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -44,23 +49,23 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build Debug and Release APK
+      - name: Build Release APK and AAB Bundle
         working-directory: android
-        run: ./gradlew assembleDebug assembleRelease --no-daemon
-
-      - name: Upload Debug APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sahaya-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
+        run: ./gradlew assembleRelease bundleRelease --no-daemon --parallel
 
       - name: Upload Release APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: sahaya-latest-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Release AAB Bundle artifact (Play Store)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sahaya-latest-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 14
 
@@ -73,8 +78,8 @@ jobs:
         run: |
           gh release create latest \
             android/app/build/outputs/apk/release/app-release.apk \
-            android/app/build/outputs/apk/debug/app-debug.apk \
-            --title "Latest Build" \
-            --notes "Automated build from commit ${{ github.sha }}. Updated on: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            android/app/build/outputs/bundle/release/app-release.aab \
+            --title "Latest Build (APK + AAB)" \
+            --notes "Automated build from commit ${{ github.sha }}. Includes APK for direct install and AAB for Google Play Store. Updated on: $(date -u '+%Y-%m-%d %H:%M UTC')"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

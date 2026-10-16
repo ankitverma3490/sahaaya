@@ -172,7 +172,8 @@ class JobApplicationController extends Controller
 
         // Admin panel users see everything; everyone else only sees
         // (a) their own applications, or (b) applications to jobs they posted.
-        if ($user->is_admin_panel_user) {
+        $isAdmin = (int) $user->user_role_id === 1 || (bool) $user->is_admin_panel_user;
+        if ($isAdmin) {
             $applications = JobApplication::with(['job', 'user'])
                          ->orderBy('created_at', 'desc')
                          ->get();
@@ -307,6 +308,23 @@ class JobApplicationController extends Controller
                 }
             }
 
+            // Check if staff already has an accepted/active job with THIS SPECIFIC house owner (or is directly added by them)
+            $isDirectlyAdded = ($user->added_by && (int)$user->added_by === (int)$job->created_by);
+            $hasAcceptedApp = JobApplication::where('user_id', $user->id)
+                ->whereIn('application_status', ['accepted', 'approved', 'hired', 'active'])
+                ->whereHas('job', function ($q) use ($job) {
+                    $q->where('created_by', $job->created_by);
+                })
+                ->exists();
+
+            if ($isDirectlyAdded || $hasAcceptedApp) {
+                \DB::table('users')->where('id', $user->id)->increment('wallet_balance', $creditsPerApplication);
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'You are already hired by this house owner. You cannot apply to another job from them.'
+                ], 400);
+            }
+
             // Also check if staff is already added by another employer
             // if ($user->is_staff_added && $user->added_by && $user->added_by !== $job->created_by) {
             //     // Refund credits
@@ -415,14 +433,8 @@ class JobApplicationController extends Controller
         
         if ($request->application_status == "accepted") {
             if ($job) {
-                $acceptedCount = JobApplication::where('job_id', $job->id)
-                    ->where('application_status', 'accepted')
-                    ->count();
-                $requiredOpenings = (int) ($job->openings ?: 1);
-                if ($acceptedCount >= $requiredOpenings) {
-                    $job->update(['status' => 'closed']);
-                    \Log::info("Job ID {$job->id} automatically closed after reaching {$requiredOpenings} accepted staff.");
-                }
+                $job->update(['status' => 'closed']);
+                \Log::info("Job ID {$job->id} unconditionally closed after accepting application {$application->id}.");
             }
 
             // Send notification to staff (in-app + FCM push + SMS + WhatsApp)
@@ -496,10 +508,11 @@ class JobApplicationController extends Controller
                 ], 404);
             }
 
-            // Only the job owner or an admin panel user may list applicants.
+            // Only the job owner or an admin panel user / super admin may list applicants.
+            $isAdmin = $authUser && ((int) $authUser->user_role_id === 1 || (bool) $authUser->is_admin_panel_user);
             if (
                 $authUser
-                && !$authUser->is_admin_panel_user
+                && !$isAdmin
                 && (int) $job->created_by !== (int) $authUser->id
             ) {
                 return response()->json([
@@ -920,9 +933,10 @@ class JobApplicationController extends Controller
 
             // houseowner_id must be the caller's employer (or the caller themselves
             // if they are the house owner) — never trust arbitrary owner IDs.
+            $isAdmin = (int) $user->user_role_id === 1 || (bool) $user->is_admin_panel_user;
             if (
                 (int) $request->houseowner_id !== (int) $user->id
-                && !$user->is_admin_panel_user
+                && !$isAdmin
             ) {
                 $isStaffOfOwner = (int) ($user->added_by ?? 0) === (int) $request->houseowner_id
                     || (int) ($user->parent_user_id ?? 0) === (int) $request->houseowner_id;

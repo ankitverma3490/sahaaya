@@ -23,6 +23,8 @@ import AllStaff from "./AdminPanel/AllStaff";
 import Reports from "./AdminPanel/Reports";
 import Settings from "./AdminPanel/Settings";
 import JobApplyLimits from "./AdminPanel/JobApplyLimits";
+import SubscriptionHistory from "./AdminPanel/SubscriptionHistory";
+import ZohoCRM from "./AdminPanel/ZohoCRM";
 import AdminUsers from "./AdminPanel/AdminUsers";
 import BlacklistManagement from "./AdminPanel/BlacklistManagement";
 import LegalConsentLogs from "./AdminPanel/LegalConsentLogs";
@@ -84,6 +86,9 @@ const AppWrapper = () => {
           <Route path="settings" element={<ProtectedAdminRoute moduleKey="settings"><Settings /></ProtectedAdminRoute>} />
           <Route path="legal-consents" element={<ProtectedAdminRoute moduleKey="settings"><LegalConsentLogs /></ProtectedAdminRoute>} />
           <Route path="training-videos" element={<ProtectedAdminRoute moduleKey="settings"><TrainingVideoManagement /></ProtectedAdminRoute>} />
+          <Route path="subscription-history" element={<ProtectedAdminRoute moduleKey="membership"><SubscriptionHistory /></ProtectedAdminRoute>} />
+          <Route path="job-apply-limits" element={<ProtectedAdminRoute moduleKey="jobs"><JobApplyLimits /></ProtectedAdminRoute>} />
+          <Route path="zoho-crm" element={<ProtectedAdminRoute moduleKey="settings"><ZohoCRM /></ProtectedAdminRoute>} />
 
 
 

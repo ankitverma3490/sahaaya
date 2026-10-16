@@ -801,7 +801,11 @@ class StaffController extends Controller
 
         // Resolve effective owner so family members see the same staff as primary owner
         $authUser = Auth::guard('api')->user();
-        $effectiveOwnerId = $authUser ? $authUser->getEffectiveOwnerId() : $request->user_id;
+        if ($authUser && $authUser->user_role_id == 1 && $request->filled('user_id')) {
+            $effectiveOwnerId = $request->user_id;
+        } else {
+            $effectiveOwnerId = $authUser ? $authUser->getEffectiveOwnerId() : $request->user_id;
+        }
 
         $terminatedUserIds = Termination::where('reported_by', $effectiveOwnerId)
             ->pluck('user_id')
@@ -809,15 +813,25 @@ class StaffController extends Controller
             ->unique()
             ->values();
 
+        $hiredStatuses = ['accepted', 'approved', 'active', 'hired', 'terminated', 'inactive'];
+        $hiredStaffIds = JobApplication::whereIn('application_status', $hiredStatuses)
+            ->whereHas('job', function($q) use ($effectiveOwnerId) {
+                $q->where('created_by', $effectiveOwnerId);
+            })
+            ->pluck('user_id')
+            ->filter()
+            ->toArray();
+
+        $directlyAddedStaffIds = User::where('user_role_id', $role->id)
+            ->where('added_by', $effectiveOwnerId)
+            ->pluck('id')
+            ->toArray();
+
+        $allStaffIds = array_unique(array_merge($hiredStaffIds, $directlyAddedStaffIds, $terminatedUserIds->all()));
+
         $query = User::where('user_role_id', $role->id)
             ->where('is_deleted', 0)
-            ->where(function ($q) use ($effectiveOwnerId, $terminatedUserIds) {
-                $q->where('added_by', $effectiveOwnerId);
-
-                if ($terminatedUserIds->isNotEmpty()) {
-                    $q->orWhereIn('id', $terminatedUserIds->all());
-                }
-            });
+            ->whereIn('id', $allStaffIds);
         // 🔍 Search
         if ($request->filled('search')) {
             $search = $request->search;

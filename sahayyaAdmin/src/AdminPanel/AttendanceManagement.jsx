@@ -1,149 +1,103 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import axiosInstance from '../utiles/axiosInstance';
+import { toast } from 'react-toastify';
 
 const AttendanceManagement = () => {
-  // Static Dummy Data for Calendar Grid
-  const days = Array.from({ length: 31 }, (_, i) => i + 1);
-  
+  const [attendanceList, setAttendanceList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [selectedRecord, setSelectedRecord] = useState(null);
+
+  const fetchAttendance = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (selectedDate) params.set('start_date', selectedDate);
+      if (selectedDate) params.set('end_date', selectedDate);
+      if (statusFilter) params.set('status', statusFilter);
+
+      const res = await axiosInstance.get(`/admin/housersold/attendance${params.toString() ? `?${params.toString()}` : ''}`);
+      if (res.data?.status || res.data?.success) {
+        const data = Array.isArray(res.data?.data) ? res.data.data : [];
+        setAttendanceList(data);
+        if (data.length > 0 && !selectedRecord) {
+          setSelectedRecord(data[0]);
+        }
+      }
+    } catch (error) {
+      toast.error('Failed to fetch attendance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAttendance();
+  }, [selectedDate, statusFilter]);
+
+  const presentCount = attendanceList.filter((a) => a.status === 'present').length;
+  const absentCount = attendanceList.filter((a) => a.status === 'absent').length;
+  const lateCount = attendanceList.filter((a) => a.status === 'late' || a.status === 'leave').length;
+  const totalCount = attendanceList.length;
+
   const summaryCards = [
-    { title: "Total Staff", value: "482", color: "#D98C7A" },
-    { title: "Present Today", value: "425", color: "#198754" },
-    { title: "Absent", value: "32", color: "#dc3545" },
-    { title: "On Leave", value: "25", color: "#ffc107" },
+    { title: "Total Marked", value: totalCount, color: "#D98C7A" },
+    { title: "Present Today", value: presentCount, color: "#198754" },
+    { title: "Absent", value: absentCount, color: "#dc3545" },
+    { title: "Late / Leave", value: lateCount, color: "#ffc107" },
   ];
 
+  const getStaffName = (rec) => {
+    const s = rec?.staff || rec?.user;
+    return `${s?.first_name || ''} ${s?.last_name || ''}`.trim() || s?.name || `Staff #${rec?.staff_id || 'N/A'}`;
+  };
+
+  const filteredAttendance = attendanceList.filter((rec) => {
+    if (!search.trim()) return true;
+    const name = getStaffName(rec).toLowerCase();
+    return name.includes(search.toLowerCase());
+  });
+
   return (
-    <div className="container-fluid p-4" style={{  minHeight: '100vh' }}>
+    <div className="container-fluid p-4" style={{ minHeight: '100vh' }}>
       <style>{`
         .sahayya-btn-primary {
           background-color: #D98C7A !important;
           border-color: #D98C7A !important;
           color: white !important;
         }
+        .sahayya-btn-primary:hover {
+          background-color: #c47b6a !important;
+          border-color: #c47b6a !important;
+        }
         .sahayya-card {
           border: none;
           border-radius: 12px;
           box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }
-        .calendar-grid {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
-          gap: 10px;
-        }
-        .calendar-day {
-          aspect-ratio: 1 / 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          border-radius: 8px;
-          background: #fff;
-          border: 1px solid #eee;
-          font-size: 0.9rem;
-        }
-        .calendar-day.active {
-          background-color: #FFF5F2;
-          border-color: #D98C7A;
-        }
-        .status-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          margin-top: 4px;
+        .sahayya-table thead th {
+          background-color: #f8f9fa;
+          color: #555;
+          font-weight: 600;
+          border-bottom: 2px solid #eee;
         }
       `}</style>
 
       {/* Page Header */}
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="fw-bold">Attendance Management</h2>
-        <button className="btn sahayya-btn-primary px-4">
-          <i className="bi bi-download me-2"></i>Export Attendance
+        <div>
+          <h2 className="fw-bold mb-0">Attendance Management</h2>
+          <small className="text-muted">Live attendance tracking and daily logs</small>
+        </div>
+        <button className="btn sahayya-btn-primary px-4" onClick={fetchAttendance} disabled={loading}>
+          <i className="bi bi-arrow-repeat me-2"></i>{loading ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
-      {/* Filter Card */}
-      <div className="card sahayya-card p-4 mb-4">
-        <div className="row g-3 align-items-end">
-          <div className="col-md-3">
-            <label className="form-label small fw-bold">Select Month</label>
-            <input type="month" className="form-control" defaultValue="2026-01" />
-          </div>
-          <div className="col-md-4">
-            <label className="form-label small fw-bold">Staff Filter</label>
-            <div className="input-group">
-              <span className="input-group-text bg-white border-end-0"><i className="bi bi-person"></i></span>
-              <input type="text" className="form-control border-start-0" placeholder="Search staff name..." />
-            </div>
-          </div>
-          <div className="col-md-2">
-            <button className="btn btn-outline-secondary w-100">Clear</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="row mb-4">
-        {/* Calendar Grid View */}
-        <div className="col-md-8">
-          <div className="card sahayya-card p-4 h-100">
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <h5 className="fw-bold mb-0">January 2026</h5>
-              <div className="d-flex gap-3 small">
-                <span><i className="bi bi-circle-fill text-success me-1"></i> Present</span>
-                <span><i className="bi bi-circle-fill text-danger me-1"></i> Absent</span>
-              </div>
-            </div>
-            
-            <div className="calendar-grid">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                <div key={day} className="text-center fw-bold text-muted mb-2 small">{day}</div>
-              ))}
-              {days.map(day => (
-                <div key={day} className={`calendar-day ${day === 22 ? 'active' : ''}`}>
-                  <span className={day === 22 ? 'fw-bold' : ''}>{day}</span>
-                  <div className="d-flex gap-1">
-                    <div className="status-dot bg-success"></div>
-                    {day % 5 === 0 && <div className="status-dot bg-danger"></div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Side Details */}
-        <div className="col-md-4">
-          <div className="card sahayya-card p-4 h-100">
-            <h5 className="fw-bold mb-4">Staff Details (Selected)</h5>
-            <div className="text-center mb-4">
-              <img src="https://i.pravatar.cc/150?u=1" className="rounded-circle border mb-2" width="80" height="80" alt="profile" />
-              <h6 className="fw-bold mb-0">Raju Prasad</h6>
-              <small className="text-muted">Driver • ID: STF-9921</small>
-            </div>
-            <div className="border rounded p-3 bg-light">
-              <div className="d-flex justify-content-between mb-2">
-                <span className="small text-muted">Check-in</span>
-                <span className="small fw-bold">09:15 AM</span>
-              </div>
-              <div className="d-flex justify-content-between">
-                <span className="small text-muted">Check-out</span>
-                <span className="small fw-bold">06:45 PM</span>
-              </div>
-            </div>
-            <div className="mt-4">
-              <h6 className="small fw-bold text-uppercase text-muted mb-3">Monthly Stats</h6>
-              <div className="progress mb-2" style={{ height: '8px' }}>
-                <div className="progress-bar bg-success" style={{ width: '90%' }}></div>
-              </div>
-              <div className="d-flex justify-content-between small">
-                <span>Punctuality</span>
-                <span className="fw-bold">90%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Summary Cards Row */}
-      <div className="row g-3">
+      <div className="row g-3 mb-4">
         {summaryCards.map((card, idx) => (
           <div className="col-md-3" key={idx}>
             <div className="card sahayya-card p-3 border-start border-4" style={{ borderColor: card.color }}>
@@ -152,6 +106,190 @@ const AttendanceManagement = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Filter Card */}
+      <div className="card sahayya-card p-4 mb-4">
+        <div className="row g-3 align-items-end">
+          <div className="col-md-3">
+            <label className="form-label small fw-bold">Select Date</label>
+            <input
+              type="date"
+              className="form-control"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+          <div className="col-md-3">
+            <label className="form-label small fw-bold">Status Filter</label>
+            <select
+              className="form-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">All Statuses</option>
+              <option value="present">Present</option>
+              <option value="absent">Absent</option>
+              <option value="late">Late</option>
+              <option value="holiday">Holiday</option>
+            </select>
+          </div>
+          <div className="col-md-4">
+            <label className="form-label small fw-bold">Staff Search</label>
+            <div className="input-group">
+              <span className="input-group-text bg-white border-end-0"><i className="bi bi-person"></i></span>
+              <input
+                type="text"
+                className="form-control border-start-0"
+                placeholder="Search staff name..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="col-md-2">
+            <button
+              className="btn btn-outline-secondary w-100"
+              onClick={() => {
+                setSelectedDate(new Date().toISOString().split('T')[0]);
+                setStatusFilter('');
+                setSearch('');
+              }}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="row mb-4">
+        {/* Attendance Table */}
+        <div className="col-md-8">
+          <div className="card sahayya-card p-4 h-100">
+            <h5 className="fw-bold mb-3">Attendance Records ({selectedDate})</h5>
+            <div className="table-responsive">
+              <table className="table sahayya-table align-middle">
+                <thead>
+                  <tr>
+                    <th>Sr.</th>
+                    <th>Staff</th>
+                    <th>Date</th>
+                    <th>Check In</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4 text-muted">
+                        Loading attendance...
+                      </td>
+                    </tr>
+                  ) : filteredAttendance.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4 text-muted">
+                        No attendance marked for this date.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAttendance.map((rec, index) => {
+                      const status = String(rec.status || '').toLowerCase();
+                      return (
+                        <tr
+                          key={rec.id}
+                          className={selectedRecord?.id === rec.id ? 'table-active' : ''}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => setSelectedRecord(rec)}
+                        >
+                          <td>{index + 1}</td>
+                          <td>
+                            <strong>{getStaffName(rec)}</strong>
+                            <br />
+                            <small className="text-muted">ID: {rec.staff_id}</small>
+                          </td>
+                          <td>{rec.date}</td>
+                          <td>{rec.check_in_time || '-'}</td>
+                          <td>
+                            <span
+                              className={`badge rounded-pill ${
+                                status === 'present'
+                                  ? 'bg-success-subtle text-success'
+                                  : status === 'absent'
+                                  ? 'bg-danger-subtle text-danger'
+                                  : 'bg-warning-subtle text-warning'
+                              }`}
+                            >
+                              {rec.status}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedRecord(rec);
+                              }}
+                            >
+                              Details
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Selected Staff Details Card */}
+        <div className="col-md-4">
+          <div className="card sahayya-card p-4 h-100">
+            <h5 className="fw-bold mb-4">Selected Record</h5>
+            {selectedRecord ? (
+              <>
+                <div className="text-center mb-4">
+                  <div
+                    className="rounded-circle border d-inline-flex align-items-center justify-content-center bg-light mb-2"
+                    style={{ width: '80px', height: '80px', fontSize: '2rem' }}
+                  >
+                    👤
+                  </div>
+                  <h6 className="fw-bold mb-0">{getStaffName(selectedRecord)}</h6>
+                  <small className="text-muted">Staff ID: {selectedRecord.staff_id}</small>
+                </div>
+                <div className="border rounded p-3 bg-light">
+                  <div className="d-flex justify-content-between mb-2">
+                    <span className="small text-muted">Date</span>
+                    <span className="small fw-bold">{selectedRecord.date}</span>
+                  </div>
+                  <div className="d-flex justify-content-between mb-2">
+                    <span className="small text-muted">Status</span>
+                    <span className="small fw-bold text-capitalize">{selectedRecord.status}</span>
+                  </div>
+                  <div className="d-flex justify-content-between mb-2">
+                    <span className="small text-muted">Check-in</span>
+                    <span className="small fw-bold">{selectedRecord.check_in_time || '-'}</span>
+                  </div>
+                  <div className="d-flex justify-content-between mb-2">
+                    <span className="small text-muted">Late Minutes</span>
+                    <span className="small fw-bold">{selectedRecord.late_minutes || 0} mins</span>
+                  </div>
+                  <div className="d-flex justify-content-between">
+                    <span className="small text-muted">Description</span>
+                    <span className="small fw-bold">{selectedRecord.description || '-'}</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-5 text-muted">
+                Select an attendance record to view details.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

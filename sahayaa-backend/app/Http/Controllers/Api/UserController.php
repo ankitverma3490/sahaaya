@@ -3545,6 +3545,7 @@ public function saveAadharAndSendOtp(Request $request)
                 'aadhar_number' => $user->aadhar_number,
             ]
         ], 200);
+        }
 
 
     } catch (\Illuminate\Validation\ValidationException $e) {
@@ -5460,14 +5461,8 @@ public function addStaff(Request $request)
                         ->where('user_id', $staff->id)
                         ->update(['application_status' => 'accepted']);
 
-                    $acceptedCount = \App\Models\JobApplication::where('job_id', $job->id)
-                        ->where('application_status', 'accepted')
-                        ->count();
-                    $requiredOpenings = (int) ($job->openings ?: 1);
-                    if ($acceptedCount >= $requiredOpenings) {
-                        $job->update(['status' => 'closed']);
-                        \Log::info("Job ID {$job->id} closed after adding staff {$staff->id}");
-                    }
+                    $job->update(['status' => 'closed']);
+                    \Log::info("Job ID {$job->id} unconditionally closed after adding staff {$staff->id}");
                 }
             } catch (\Throwable $e) {
                 \Log::warning('Auto closing job on addStaff failed: ' . $e->getMessage());
@@ -6155,14 +6150,8 @@ private function updateExistingStaff(User $existingUser, Request $request)
                         ->where('user_id', $existingUser->id)
                         ->update(['application_status' => 'accepted']);
 
-                    $acceptedCount = \App\Models\JobApplication::where('job_id', $job->id)
-                        ->where('application_status', 'accepted')
-                        ->count();
-                    $requiredOpenings = (int) ($job->openings ?: 1);
-                    if ($acceptedCount >= $requiredOpenings) {
-                        $job->update(['status' => 'closed']);
-                        \Log::info("Job ID {$job->id} closed after updating staff {$existingUser->id}");
-                    }
+                    $job->update(['status' => 'closed']);
+                    \Log::info("Job ID {$job->id} unconditionally closed after updating staff {$existingUser->id}");
                 }
             } catch (\Throwable $e) {
                 \Log::warning('Auto closing job on updateExistingStaff failed: ' . $e->getMessage());

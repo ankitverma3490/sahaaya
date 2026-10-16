@@ -18,8 +18,10 @@ const StaffManagement = () => {
   const fetchOwner = async () => {
     try {
       const res = await axiosInstance.get(`/admin/houseowners/${ownerId}`);
-      if (res.data.success) {
-        setOwnerName(res.data.data.first_name + " " + res.data.data.last_name);
+      if (res.data.success && res.data.data) {
+        const o = res.data.data;
+        const fullName = `${o.first_name || ""} ${o.last_name || ""}`.trim() || o.name || `House Owner #${ownerId}`;
+        setOwnerName(fullName);
       }
     } catch (error) {
       toast.error("Failed to fetch owner details");
@@ -33,8 +35,10 @@ const StaffManagement = () => {
       });
 
       if (res.data.success) {
-        setStaffList(res.data.data.data);
-        setFilteredStaff(res.data.data.data);
+        const raw = res.data.data;
+        const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+        setStaffList(list);
+        setFilteredStaff(list);
       }
 
     } catch (error) {

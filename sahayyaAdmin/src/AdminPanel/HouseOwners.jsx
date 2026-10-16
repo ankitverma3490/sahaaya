@@ -88,18 +88,24 @@ const HouseOwners = () => {
   const [ownerSaving, setOwnerSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ current_page: 1, last_page: 1, total: 0 });
 
-  const ownersPerPage = 5;
-
-  const fetchOwners = async () => {
+  const fetchOwners = async (page = 1) => {
     try {
       setLoading(true);
-      const res = await axiosInstance.get("/admin/houseowners");
+      const res = await axiosInstance.get(`/admin/houseowners?page=${page}&per_page=15`);
 
       if (res.data.success) {
-        const data = res.data.data.data || [];
+        const raw = res.data.data;
+        const data = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
         setOwners(data);
         setFilteredOwners(data);
+        setCurrentPage(raw?.current_page || page);
+        setPagination({
+          current_page: raw?.current_page || page,
+          last_page: raw?.last_page || 1,
+          total: raw?.total || data.length,
+        });
       }
     } catch (error) {
       console.log(error);
@@ -110,23 +116,23 @@ const HouseOwners = () => {
   };
 
   useEffect(() => {
-    fetchOwners();
+    fetchOwners(1);
   }, []);
 
   useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredOwners(owners);
+      return;
+    }
     const filtered = owners.filter((owner) =>
       getOwnerName(owner).toLowerCase().includes(searchTerm.toLowerCase()) ||
       String(owner.phone_number || "").includes(searchTerm)
     );
-
     setFilteredOwners(filtered);
-    setCurrentPage(1);
   }, [searchTerm, owners]);
 
-  const indexOfLastOwner = currentPage * ownersPerPage;
-  const indexOfFirstOwner = indexOfLastOwner - ownersPerPage;
-  const currentOwners = filteredOwners.slice(indexOfFirstOwner, indexOfLastOwner);
-  const totalPages = Math.ceil(filteredOwners.length / ownersPerPage);
+  const currentOwners = filteredOwners;
+  const totalPages = pagination.last_page || 1;
 
   const handleDeleteOwner = async (id) => {
     if (!window.confirm("Are you sure you want to delete this owner?")) return;
@@ -300,21 +306,21 @@ const HouseOwners = () => {
             <nav>
               <ul className="pagination mb-0">
                 <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
-                  <button className="page-link" onClick={() => setCurrentPage((prev) => prev - 1)}>
+                  <button className="page-link" onClick={() => fetchOwners(currentPage - 1)} disabled={currentPage === 1}>
                     Previous
                   </button>
                 </li>
 
                 {[...Array(totalPages)].map((_, i) => (
                   <li key={i} className={`page-item ${currentPage === i + 1 ? "active" : ""}`}>
-                    <button className="page-link" onClick={() => setCurrentPage(i + 1)}>
+                    <button className="page-link" onClick={() => fetchOwners(i + 1)}>
                       {i + 1}
                     </button>
                   </li>
                 ))}
 
                 <li className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}>
-                  <button className="page-link" onClick={() => setCurrentPage((prev) => prev + 1)}>
+                  <button className="page-link" onClick={() => fetchOwners(currentPage + 1)} disabled={currentPage === totalPages}>
                     Next
                   </button>
                 </li>

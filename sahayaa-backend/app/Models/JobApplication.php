@@ -24,6 +24,18 @@ class JobApplication extends Model
         'available_from' => 'date'
     ];
 
+    protected static function booted()
+    {
+        static::saved(function ($application) {
+            if (in_array(strtolower((string) $application->application_status), ['accepted', 'approved', 'hired'])) {
+                if ($application->job_id) {
+                    Job::where('id', $application->job_id)->update(['status' => 'closed']);
+                    \Log::info("JobApplication model event: Automatically closed Job ID {$application->job_id} because application {$application->id} status became {$application->application_status}.");
+                }
+            }
+        });
+    }
+
     public function job()
     {
         return $this->belongsTo(Job::class);

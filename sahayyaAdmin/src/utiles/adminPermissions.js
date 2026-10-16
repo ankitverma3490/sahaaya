@@ -6,7 +6,6 @@ export const ADMIN_MODULES = [
   { key: "roles", label: "Add Role" },
   { key: "membership", label: "Membership" },
   { key: "reports", label: "Reports" },
-  { key: "blacklist", label: "Blacklist" },
   { key: "sub_admins", label: "Admin Users" },
   { key: "settings", label: "Settings" },
 ];

@@ -7,17 +7,23 @@ const SubscriptionHistory = () => {
   const [owners, setOwners] = useState([]);
   const [staffs, setStaffs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [pagination, setPagination] = useState({ current_page: 1, last_page: 1, total: 0 });
 
   // ================= FETCH SUBSCRIPTIONS =================
-  const fetchSubscriptions = async () => {
+  const fetchSubscriptions = async (page = 1) => {
     try {
       setLoading(true);
       const res = await axiosInstance.get(
-        "/admin/subscriptionuser/history"
+        `/admin/subscriptionuser/history?page=${page}&per_page=15`
       );
 
       if (res.data.status) {
-        setSubscriptions(res.data.subscriptions.data);
+        setSubscriptions(res.data.subscriptions?.data || []);
+        setPagination({
+          current_page: res.data.subscriptions?.current_page || page,
+          last_page: res.data.subscriptions?.last_page || 1,
+          total: res.data.subscriptions?.total || 0,
+        });
       }
     } catch (error) {
       console.log(error);
@@ -26,18 +32,6 @@ const SubscriptionHistory = () => {
     }
   };
 
-  const handleRefund = async (id) => {
-    if (!window.confirm("Are you sure you want to refund this subscription?")) return;
-    try {
-      const res = await axiosInstance.post(`/admin/subscriptionuser/${id}/refund`);
-      if (res.data.status) {
-        toast.success("Refunded successfully");
-        fetchSubscriptions();
-      }
-    } catch (error) {
-      toast.error("Failed to process refund");
-    }
-  };
 
   // ================= FETCH OWNERS =================
   const fetchOwners = async () => {
@@ -111,7 +105,7 @@ const SubscriptionHistory = () => {
     if (ownerMap[userId]) return ownerMap[userId];
     if (staffMap[userId]) return staffMap[userId];
 
-    return "Unknown User";
+    return sub?.user_id ? `User #${sub.user_id}` : "User";
   };
 
   const getEffectiveAmount = (sub) => {
@@ -145,7 +139,7 @@ const SubscriptionHistory = () => {
               <th>Start Date</th>
               <th>End Date</th>
               <th>Status</th>
-              <th>Action</th>
+              <th>Payment Status</th>
             </tr>
           </thead>
 
@@ -201,11 +195,17 @@ const SubscriptionHistory = () => {
                     </span>
                   </td>
                   <td>
-                    {sub.payment_status === 'completed' || sub.payment_status === 'paid' ? (
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => handleRefund(sub.id)}>Refund</button>
-                    ) : (
-                      <span className="text-muted small">{sub.payment_status || "N/A"}</span>
-                    )}
+                    <span className={`badge ${
+                      sub.payment_status === 'completed' || sub.payment_status === 'paid'
+                        ? 'bg-success'
+                        : sub.payment_status === 'refunded'
+                        ? 'bg-warning text-dark'
+                        : sub.payment_status === 'free'
+                        ? 'bg-info text-dark'
+                        : 'bg-secondary'
+                    }`}>
+                      {sub.payment_status || "N/A"}
+                    </span>
                   </td>
                 </tr>
               ))
@@ -213,6 +213,39 @@ const SubscriptionHistory = () => {
           </tbody>
         </table>
       </div>
+
+      {pagination.last_page > 1 && (
+        <div className="d-flex justify-content-between align-items-center mt-3">
+          <small className="text-muted">Total: {pagination.total} records</small>
+          <nav>
+            <ul className="pagination pagination-sm mb-0">
+              <li className={`page-item ${pagination.current_page === 1 ? "disabled" : ""}`}>
+                <button
+                  className="page-link"
+                  onClick={() => fetchSubscriptions(pagination.current_page - 1)}
+                  disabled={pagination.current_page === 1}
+                >
+                  Previous
+                </button>
+              </li>
+              <li className="page-item disabled">
+                <span className="page-link">
+                  Page {pagination.current_page} of {pagination.last_page}
+                </span>
+              </li>
+              <li className={`page-item ${pagination.current_page === pagination.last_page ? "disabled" : ""}`}>
+                <button
+                  className="page-link"
+                  onClick={() => fetchSubscriptions(pagination.current_page + 1)}
+                  disabled={pagination.current_page === pagination.last_page}
+                >
+                  Next
+                </button>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      )}
     </div>
   );
 };

@@ -160,12 +160,9 @@ const InlineSkillsPanel = ({ roleId }) => {
     }
     setSaving(true);
     try {
-      const response = await fetch(DEFAULT_IMAGE);
-      const blob = await response.blob();
       const fd = new FormData();
       fd.append("name", val);
       fd.append("parent_id", roleId);
-      fd.append("image", blob, "default.jpg");
       await axiosInstance.post("/category/save", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -356,11 +353,8 @@ const Addrole = () => {
     setSubmitting(true);
     try {
       // 1. Create the role (category)
-      const imgResponse = await fetch(DEFAULT_IMAGE);
-      const blob = await imgResponse.blob();
       const fd = new FormData();
       fd.append("name", roleName.trim());
-      fd.append("image", blob, "default.jpg");
 
       const res = await axiosInstance.post("/category/save", fd, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -375,7 +369,6 @@ const Addrole = () => {
             const sfd = new FormData();
             sfd.append("name", skill);
             sfd.append("parent_id", newRoleId);
-            sfd.append("image", blob, "default.jpg");
             await axiosInstance.post("/category/save", sfd, {
               headers: { "Content-Type": "multipart/form-data" },
             });

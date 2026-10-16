@@ -18,6 +18,10 @@ class CheckAdminPermission
             ], 401);
         }
 
+        if ((int) $user->user_role_id === 1) {
+            return $next($request);
+        }
+
         if (!$user->is_admin_panel_user) {
             return $next($request);
         }
