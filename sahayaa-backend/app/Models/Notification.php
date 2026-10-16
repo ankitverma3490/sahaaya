@@ -25,4 +25,9 @@ class Notification extends Model
         'application_id' => 'integer',
         'read_at' => 'datetime',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }
