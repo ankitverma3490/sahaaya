@@ -254,7 +254,7 @@ const HouseOwners = () => {
               ) : (
                 currentOwners.map((owner, index) => (
                   <tr key={owner.id}>
-                    <td>{indexOfFirstOwner + index + 1}</td>
+                    <td>{(currentPage - 1) * 15 + index + 1}</td>
                     <td>
                       <img
                         src={owner.image || "https://img.freepik.com/free-vector/blue-circle-with-white-user_78370-4707.jpg"}
