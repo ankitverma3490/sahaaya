@@ -139,21 +139,20 @@ const SubscriptionHistory = () => {
               <th>Start Date</th>
               <th>End Date</th>
               <th>Status</th>
-              <th>Payment Status</th>
             </tr>
           </thead>
 
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="10" className="text-center py-5">
+                <td colSpan="9" className="text-center py-5">
                   <div className="spinner-border spinner-border-sm text-success me-2" role="status"></div>
                   Loading history...
                 </td>
               </tr>
             ) : subscriptions.length === 0 ? (
               <tr>
-                <td colSpan="10" className="text-center py-5">
+                <td colSpan="9" className="text-center py-5">
                   <p className="text-muted m-0">No subscription history found</p>
                 </td>
               </tr>
@@ -192,19 +191,6 @@ const SubscriptionHistory = () => {
                         }`}
                     >
                       {sub.status}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${
-                      sub.payment_status === 'completed' || sub.payment_status === 'paid'
-                        ? 'bg-success'
-                        : sub.payment_status === 'refunded'
-                        ? 'bg-warning text-dark'
-                        : sub.payment_status === 'free'
-                        ? 'bg-info text-dark'
-                        : 'bg-secondary'
-                    }`}>
-                      {sub.payment_status || "N/A"}
                     </span>
                   </td>
                 </tr>
