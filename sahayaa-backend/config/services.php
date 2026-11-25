@@ -71,9 +71,22 @@ return [
     ],
 
     'aadhaar' => [
-        'base_url' => env('AADHAAR_API_BASE_URL', 'https://api.digiverification.com'),
-        'partner_code' => env('AADHAAR_PARTNER_CODE', 'ESP00120'),
-        'token_key' => env('AADHAAR_TOKEN_KEY', '62eedbdf05b47a026ef0fe708d387ae352294c26'),
+        'provider' => env('AADHAAR_PROVIDER', 'sandbox'), // 'sandbox' or 'digiverification'
+
+        // Sandbox.co.in credentials
+        'sandbox' => [
+            'base_url'    => env('SANDBOX_BASE_URL', 'https://api.sandbox.co.in'),
+            'api_key'     => env('SANDBOX_API_KEY', 'key_live_c073be67661d4a3d8de6d5db0fc848e1'),
+            'api_secret'  => env('SANDBOX_API_SECRET', 'secret_live_1b663a10cf0f4c64b117c28128003f38'),
+            'api_version' => env('SANDBOX_API_VERSION', '1.0.0'),
+        ],
+
+        // DigiVerification credentials (previous / fallback)
+        'digiverification' => [
+            'base_url'     => env('AADHAAR_API_BASE_URL', 'https://api.digiverification.com'),
+            'partner_code' => env('AADHAAR_PARTNER_CODE', 'ESP00120'),
+            'token_key'    => env('AADHAAR_TOKEN_KEY', '62eedbdf05b47a026ef0fe708d387ae352294c26'),
+        ],
     ]
     
 ];
